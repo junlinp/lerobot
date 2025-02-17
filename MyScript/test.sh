@@ -24,11 +24,21 @@ lerobot/aloha_sim_transfer_cube_scripted
     #--steps=10000
 
 # for transfer task
+#python lerobot/scripts/eval.py \
+    #--policy.path=/home/junlinp/test/lerobot/outputs/train/2025-02-14/15-30-00_vqbet/checkpoints/last/pretrained_model \
+    #--env.type=aloha \
+    #--eval.batch_size=8 \
+    #--eval.n_episodes=128 \
+    #--use_amp=false \
+    #--device=cuda \
+    #--env.task=AlohaTransferCube-v0
+
+
 python lerobot/scripts/eval.py \
-    --policy.path=/home/junlinp/test/lerobot/outputs/train/2025-02-14/15-30-00_vqbet/checkpoints/last/pretrained_model \
+    --policy.path=lerobot/pi0 \
     --env.type=aloha \
     --eval.batch_size=8 \
-    --eval.n_episodes=128 \
+    --eval.n_episodes=64 \
     --use_amp=false \
     --device=cuda \
     --env.task=AlohaTransferCube-v0
@@ -40,5 +50,6 @@ python lerobot/scripts/eval.py \
     #--eval.batch_size=8 \
     #--eval.n_episodes=128 \
     #--use_amp=false \
-    #--device=cpu \
-    #--env.task=AlohaTransferCube-v0
+    #--device=cuda \
+    #--env.task=AlohaInsertion-v0
+
