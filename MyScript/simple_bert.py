@@ -212,7 +212,7 @@ class PositionalEmbedding(torch.nn.Module):
                 pe[pos, i + 1] = math.cos(pos / (10000 ** ((2 * (i + 1))/d_model)))
 
         # include the batch size
-        self.pe = pe.unsqueeze(0)   
+        self.pe = torch.nn.Parameter(pe.unsqueeze(0))
         #self.register_buffer('pe', pe)
 
     def forward(self, x):
