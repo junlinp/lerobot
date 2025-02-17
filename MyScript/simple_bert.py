@@ -213,7 +213,7 @@ class PositionalEmbedding(torch.nn.Module):
 
         # include the batch size
         self.pe = pe.unsqueeze(0)   
-        self.register_buffer('pe', pe)
+        #self.register_buffer('pe', pe)
 
     def forward(self, x):
         return self.pe
