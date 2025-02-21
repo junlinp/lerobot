@@ -470,7 +470,7 @@ def eval(cfg: EvalPipelineConfig):
 
     logging.info("Making environment.")
     logging.info(f"env task is : {cfg.env.task}")
-    text_input = [TaskText[cfg.env.task] for i in cfg.eval.batch_size]
+    text_input = [TaskText[cfg.env.task] for i in range(cfg.eval.batch_size)]
     env = make_env(cfg.env, n_envs=cfg.eval.batch_size, use_async_envs=cfg.eval.use_async_envs)
     logging.info("Making policy.")
     policy = make_policy(
