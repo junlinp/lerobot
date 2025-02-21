@@ -48,6 +48,8 @@ import itertools
 
 from lerobot.__version__ import __version__  # noqa: F401
 
+import simpler_env
+
 # TODO(rcadene): Improve policies and envs. As of now, an item in `available_policies`
 # refers to a yaml file AND a modeling name. Same for `available_envs` which refers to
 # a yaml file AND a environment name. The difference should be more obvious.
@@ -58,6 +60,7 @@ available_tasks_per_env = {
     ],
     "pusht": ["PushT-v0"],
     "xarm": ["XarmLift-v0"],
+    "simpler" : [simpler_env.ENVIRONMENT_MAP[env][0] for env in simpler_env.ENVIRONMENTS]
 }
 available_envs = list(available_tasks_per_env.keys())
 
@@ -85,6 +88,8 @@ available_datasets_per_env = {
         "lerobot/xarm_push_medium_image",
         "lerobot/xarm_push_medium_replay_image",
     ],
+    # TODO(junlinp):train datasets
+    "simpler":[]
 }
 
 available_real_world_datasets = [
@@ -203,12 +208,14 @@ available_policies_per_env = {
     "xarm": ["tdmpc"],
     "koch_real": ["act_koch_real"],
     "aloha_real": ["act_aloha_real"],
+    "simpler" : ["pi0"],
 }
 
 env_task_pairs = [(env, task) for env, tasks in available_tasks_per_env.items() for task in tasks]
 env_dataset_pairs = [
     (env, dataset) for env, datasets in available_datasets_per_env.items() for dataset in datasets
 ]
+
 env_dataset_policy_triplets = [
     (env, dataset, policy)
     for env, datasets in available_datasets_per_env.items()
