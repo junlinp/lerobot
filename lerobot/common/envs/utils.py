@@ -23,7 +23,7 @@ from lerobot.common.utils.utils import get_channel_first_image_shape
 from lerobot.configs.types import FeatureType, PolicyFeature
 
 
-def preprocess_observation(observations: dict[str, np.ndarray], text_input : str | None) -> dict[str, Tensor]:
+def preprocess_observation(observations: dict[str, np.ndarray], text_input : list[str] | None) -> dict[str, Tensor]:
     # TODO(aliberts, rcadene): refactor this to use features from the environment (no hardcoding)
     """Convert environment observation to LeRobot format observation.
     Args:

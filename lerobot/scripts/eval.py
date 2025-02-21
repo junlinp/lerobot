@@ -87,7 +87,7 @@ def rollout(
     seeds: list[int] | None = None,
     return_observations: bool = False,
     render_callback: Callable[[gym.vector.VectorEnv], None] | None = None,
-    text_input : str | None = None,
+    text_input : list[str] | None = None,
 ) -> dict:
     """Run a batched policy rollout once through a batch of environments.
 
@@ -221,7 +221,7 @@ def eval_policy(
     videos_dir: Path | None = None,
     return_episode_data: bool = False,
     start_seed: int | None = None,
-    text_input : str | None = None,
+    text_input : list[str] | None = None,
 ) -> dict:
     """
     Args:
@@ -470,7 +470,7 @@ def eval(cfg: EvalPipelineConfig):
 
     logging.info("Making environment.")
     logging.info(f"env task is : {cfg.env.task}")
-    text_input = TaskText[cfg.env.task]
+    text_input = [TaskText[cfg.env.task] for i in cfg.eval.batch_size]
     env = make_env(cfg.env, n_envs=cfg.eval.batch_size, use_async_envs=cfg.eval.use_async_envs)
     logging.info("Making policy.")
     policy = make_policy(
