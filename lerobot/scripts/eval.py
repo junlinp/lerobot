@@ -79,7 +79,7 @@ from lerobot.common.utils.utils import (
 )
 from lerobot.configs import parser
 from lerobot.configs.eval import EvalPipelineConfig
-
+from lerobot.scripts.constants import TaskText
 
 def rollout(
     env: gym.vector.VectorEnv,
@@ -87,6 +87,7 @@ def rollout(
     seeds: list[int] | None = None,
     return_observations: bool = False,
     render_callback: Callable[[gym.vector.VectorEnv], None] | None = None,
+    text_input : str | None = None,
 ) -> dict:
     """Run a batched policy rollout once through a batch of environments.
 
@@ -147,11 +148,12 @@ def rollout(
     )
     while not np.all(done):
         # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
-        observation = preprocess_observation(observation)
+        #print(f"observation : {observation}")
+        observation = preprocess_observation(observation, text_input= text_input)
         if return_observations:
             all_observations.append(deepcopy(observation))
 
-        observation = {key: observation[key].to(device, non_blocking=True) for key in observation}
+        observation = {key: observation[key] if type(observation[key]) is str else observation[key].to(device, non_blocking=True) for key in observation}
 
         with torch.inference_mode():
             action = policy.select_action(observation)
@@ -219,6 +221,7 @@ def eval_policy(
     videos_dir: Path | None = None,
     return_episode_data: bool = False,
     start_seed: int | None = None,
+    text_input : str | None = None,
 ) -> dict:
     """
     Args:
@@ -295,6 +298,7 @@ def eval_policy(
             seeds=list(seeds) if seeds else None,
             return_observations=return_episode_data,
             render_callback=render_frame if max_episodes_rendered > 0 else None,
+            text_input= text_input
         )
 
         # Figure out where in each rollout sequence the first done condition was encountered (results after
@@ -465,8 +469,9 @@ def eval(cfg: EvalPipelineConfig):
     logging.info(colored("Output dir:", "yellow", attrs=["bold"]) + f" {cfg.output_dir}")
 
     logging.info("Making environment.")
+    logging.info(f"env task is : {cfg.env.task}")
+    text_input = TaskText[cfg.env.task]
     env = make_env(cfg.env, n_envs=cfg.eval.batch_size, use_async_envs=cfg.eval.use_async_envs)
-
     logging.info("Making policy.")
     policy = make_policy(
         cfg=cfg.policy,
@@ -483,6 +488,7 @@ def eval(cfg: EvalPipelineConfig):
             max_episodes_rendered=10,
             videos_dir=Path(cfg.output_dir) / "videos",
             start_seed=cfg.seed,
+            text_input = text_input
         )
     print(info["aggregated"])
 

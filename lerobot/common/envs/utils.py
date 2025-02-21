@@ -23,7 +23,7 @@ from lerobot.common.utils.utils import get_channel_first_image_shape
 from lerobot.configs.types import FeatureType, PolicyFeature
 
 
-def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Tensor]:
+def preprocess_observation(observations: dict[str, np.ndarray], text_input : str | None) -> dict[str, Tensor]:
     # TODO(aliberts, rcadene): refactor this to use features from the environment (no hardcoding)
     """Convert environment observation to LeRobot format observation.
     Args:
@@ -62,6 +62,8 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
             observations["environment_state"]
         ).float()
 
+    if "tasks" not in observations  and not text_input is None:
+        return_observations["tasks"] = text_input
     # TODO(rcadene): enable pixels only baseline with `obs_type="pixels"` in environment by removing
     # requirement for "agent_pos"
     return_observations["observation.state"] = torch.from_numpy(observations["agent_pos"]).float()

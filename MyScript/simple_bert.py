@@ -406,12 +406,14 @@ class NextSentencePrediction(torch.nn.Module):
         :param hidden: BERT model output size
         """
         super().__init__()
-        self.linear = torch.nn.Linear(hidden, 2)
+        self.linear = torch.nn.Linear(hidden * MAX_LEN, 2)
         self.softmax = torch.nn.LogSoftmax(dim=-1)
 
     def forward(self, x):
         # use only the first token which is the [CLS]
-        return self.softmax(self.linear(x[:, 0]))
+        x = x.view(x.size(0), -1)
+        #print(f"x.shape {x.shape}")
+        return self.softmax(self.linear(x))
 
 class MaskedLanguageModel(torch.nn.Module):
     """

@@ -13,7 +13,6 @@ class EnvConfig(draccus.ChoiceRegistry, abc.ABC):
     fps: int = 30
     features: dict[str, PolicyFeature] = field(default_factory=dict)
     features_map: dict[str, str] = field(default_factory=dict)
-
     @property
     def type(self) -> str:
         return self.get_choice_name(self.__class__)

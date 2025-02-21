@@ -33,15 +33,23 @@ lerobot/aloha_sim_transfer_cube_scripted
     #--device=cuda \
     #--env.task=AlohaTransferCube-v0
 
-
 python lerobot/scripts/eval.py \
-    --policy.path=lerobot/pi0 \
+    --policy.path=lerobot/act_aloha_sim_transfer_cube_human \
     --env.type=aloha \
     --eval.batch_size=8 \
     --eval.n_episodes=64 \
     --use_amp=false \
     --device=cuda \
     --env.task=AlohaTransferCube-v0
+
+#python lerobot/scripts/eval.py \
+    #--policy.path=lerobot/pi0 \
+    #--env.type=aloha \
+    #--eval.batch_size=8 \
+    #--eval.n_episodes=64 \
+    #--use_amp=false \
+    #--device=cuda \
+    #--env.task=AlohaTransferCube-v0
 
 
 #python lerobot/scripts/eval.py \

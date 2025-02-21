@@ -269,9 +269,9 @@ class PI0Policy(PreTrainedPolicy):
         queue is empty.
         """
         self.eval()
-        if "task" not in batch:
-            batch_size = batch["observation.state"].shape[0]
-            batch["task"] = ["Pick up the cube with the right arm and transfer it to the left arm." for i in range(batch_size)]
+        #if "task" not in batch:
+        #    batch_size = batch["observation.state"].shape[0]
+        #    batch["task"] = ["Pick up the cube with the right arm and transfer it to the left arm." for i in range(batch_size)]
 
         if self.config.adapt_to_pi_aloha:
             batch[OBS_ROBOT] = self._pi_aloha_decode_state(batch[OBS_ROBOT])
