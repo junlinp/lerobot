@@ -33,7 +33,13 @@ lerobot/aloha_sim_transfer_cube_scripted
     #--device=cuda \
     #--env.task=AlohaTransferCube-v0
 
-python lerobot/scripts/eval.py \
+xvfb-run python lerobot/scripts/train.py \
+    --dataset.repo_id=lerobot/aloha_sim_transfer_cube_human \
+    --policy.type=pi0 \
+    --device cuda \
+    --steps 10000
+
+xvfb-run python lerobot/scripts/eval.py \
     --policy.path=lerobot/act_aloha_sim_transfer_cube_human \
     --env.type=aloha \
     --eval.batch_size=8 \
