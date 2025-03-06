@@ -48,7 +48,6 @@ import itertools
 
 from lerobot.__version__ import __version__  # noqa: F401
 
-import simpler_env
 
 # TODO(rcadene): Improve policies and envs. As of now, an item in `available_policies`
 # refers to a yaml file AND a modeling name. Same for `available_envs` which refers to
@@ -60,7 +59,6 @@ available_tasks_per_env = {
     ],
     "pusht": ["PushT-v0"],
     "xarm": ["XarmLift-v0"],
-    "simpler" : [simpler_env.ENVIRONMENT_MAP[env][0] for env in simpler_env.ENVIRONMENTS]
 }
 available_envs = list(available_tasks_per_env.keys())
 

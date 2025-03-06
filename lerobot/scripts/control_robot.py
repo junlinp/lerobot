@@ -238,7 +238,7 @@ def record(
         )
 
     # Load pretrained policy
-    policy = None if cfg.policy is None else make_policy(cfg.policy, cfg.device, ds_meta=dataset.meta)
+    policy = None if cfg.policy is None else make_policy(cfg.policy, cfg.device, ds_meta=dataset.meta, keep_cfg_features=True)
 
     if not robot.is_connected:
         robot.connect()
