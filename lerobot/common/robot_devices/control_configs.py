@@ -1,3 +1,17 @@
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,15 +74,13 @@ class RecordControlConfig(ControlConfig):
     num_episodes: int = 50
     # Encode frames in the dataset into video
     video: bool = True
-    # By default, run the computation of the data statistics at the end of data collection. Compute intensive and not required to just replay an episode.
-    run_compute_stats: bool = True
     # Upload dataset to Hugging Face hub.
     push_to_hub: bool = True
     # Upload on private repository on the Hugging Face hub.
     private: bool = False
     # Add tags to your dataset on the hub.
     tags: list[str] | None = None
-    # Number of subprocesses handling the saving of frames as PNGs. Set to 0 to use threads only;
+    # Number of subprocesses handling the saving of frames as PNG. Set to 0 to use threads only;
     # set to ≥1 to use subprocesses, each using threads to write images. The best number of processes
     # and threads depends on your system. We recommend 4 threads per camera with 0 processes.
     # If fps is unstable, adjust the thread count. If still unstable, try using 1 or more subprocesses.
@@ -83,9 +95,6 @@ class RecordControlConfig(ControlConfig):
     play_sounds: bool = True
     # Resume recording on an existing dataset.
     resume: bool = False
-    # TODO(rcadene, aliberts): remove local_files_only when refactor with dataset as argument
-    # Use local files only. By default, this script will try to fetch the dataset from the hub if it exists.
-    local_files_only: bool = False
 
     def __post_init__(self):
         # HACK: We parse again the cli args here to get the pretrained path if there was one.
@@ -130,9 +139,12 @@ class ReplayControlConfig(ControlConfig):
     fps: int | None = None
     # Use vocal synthesis to read events.
     play_sounds: bool = True
-    # TODO(rcadene, aliberts): remove local_files_only when refactor with dataset as argument
-    # Use local files only. By default, this script will try to fetch the dataset from the hub if it exists.
-    local_files_only: bool = False
+
+
+@ControlConfig.register_subclass("remote_robot")
+@dataclass
+class RemoteRobotConfig(ControlConfig):
+    log_interval: int = 100
 
 
 @dataclass

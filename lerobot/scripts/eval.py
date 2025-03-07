@@ -153,7 +153,7 @@ def rollout(
         if return_observations:
             all_observations.append(deepcopy(observation))
 
-        observation = {key: observation[key] if key == "task" else observation[key].to(device, non_blocking=True) for key in observation}
+        observation = {key: observation[key] if key == "task" else observation[key].to(device, non_blocking=device.type == "cuda") for key in observation}
 
         with torch.inference_mode():
             action = policy.select_action(observation)
@@ -456,7 +456,7 @@ def _compile_episode_data(
 
 
 @parser.wrap()
-def eval(cfg: EvalPipelineConfig):
+def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
 
     # Check device is available
@@ -503,4 +503,4 @@ def eval(cfg: EvalPipelineConfig):
 
 if __name__ == "__main__":
     init_logging()
-    eval()
+    eval_main()

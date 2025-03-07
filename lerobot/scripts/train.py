@@ -72,7 +72,7 @@ def update_policy(
         # TODO(rcadene): policy.unnormalize_outputs(out_dict)
     grad_scaler.scale(loss).backward()
 
-    # Unscale the graident of the optimzer's assigned params in-place **prior to gradient clipping**.
+    # Unscale the gradient of the optimizer's assigned params in-place **prior to gradient clipping**.
     grad_scaler.unscale_(optimizer)
 
     grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -232,7 +232,9 @@ def train(cfg: TrainPipelineConfig):
         if is_log_step:
             logging.info(train_tracker)
             if wandb_logger:
-                wandb_log_dict = {**train_tracker.to_dict(), **output_dict}
+                wandb_log_dict = train_tracker.to_dict()
+                if output_dict:
+                    wandb_log_dict.update(output_dict)
                 wandb_logger.log_dict(wandb_log_dict, step)
             train_tracker.reset_averages()
 
