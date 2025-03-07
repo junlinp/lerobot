@@ -33,19 +33,20 @@ lerobot/aloha_sim_transfer_cube_scripted
     #--device=cuda \
     #--env.task=AlohaTransferCube-v0
 
-xvfb-run python lerobot/scripts/train.py \
-    --dataset.repo_id=lerobot/aloha_sim_transfer_cube_human \
-    --policy.type=pi0 \
-    --device cuda \
-    --steps 10000
+#xvfb-run python lerobot/scripts/train.py \
+    #--dataset.repo_id=lerobot/aloha_sim_transfer_cube_human \
+    #--policy.type=pi0 \
+    #--device cuda \
+    #--steps 10000
 
-xvfb-run python lerobot/scripts/eval.py \
-    --policy.path=lerobot/act_aloha_sim_transfer_cube_human \
-    --env.type=aloha \
+    #--policy.path=lerobot/act_aloha_sim_transfer_cube_human \
+python lerobot/scripts/eval.py \
+    --policy.path=/mnt/ml-experiment-data/junlinp/outputs/act_cube_scripted/checkpoints/080000/pretrained_model \
     --eval.batch_size=8 \
     --eval.n_episodes=64 \
     --use_amp=false \
     --device=cuda \
+    --env.type=aloha \
     --env.task=AlohaTransferCube-v0
 
 #python lerobot/scripts/eval.py \

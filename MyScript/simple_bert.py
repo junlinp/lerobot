@@ -13,6 +13,7 @@ import math
 import torch.nn.functional as F
 import numpy as np
 from torch.optim import Adam
+from einops import rearrange, reduce, repeat, einsum
 
 def CreateDirIfNotExists(path: str):
     if not os.path.exists(path):
@@ -196,11 +197,10 @@ class BERTDataset(Dataset):
     def get_random_line(self):
         '''return random single sentence'''
         return self.lines[random.randrange(len(self.lines))][1]
-class PositionalEmbedding(torch.nn.Module):
 
+class PositionalEmbedding(torch.nn.Module):
     def __init__(self, d_model, max_len=128):
         super().__init__()
-
         # Compute the positional encodings once in log space.
         pe = torch.zeros(max_len, d_model).float()
         pe.require_grad = False
@@ -282,12 +282,19 @@ class MultiHeadedAttention(torch.nn.Module):
         value = self.value(value)   
         
         # (batch_size, max_len, d_model) --> (batch_size, max_len, h, d_k) --> (batch_size, h, max_len, d_k)
-        query = query.view(query.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)   
-        key = key.view(key.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)  
-        value = value.view(value.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)  
+        query = rearrange(query, "batch sequence_len (head head_dimension) -> batch head sequence_len head_dimension", head=self.heads, head_dimension = self.d_k)
+        #query = query.view(query.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)   
+
+        key = rearrange(key, "batch sequence_len (head head_dimension) -> batch head sequence_len head_dimension", head = self.heads, head_dimension = self.d_k)
+        #key = key.view(key.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)  
+
+        value = rearrange(value, "batch sequence_len (head head_dimension) -> batch head sequence_len head_dimension", head = self.heads, head_dimension = self.d_k)
+        #value = value.view(value.shape[0], -1, self.heads, self.d_k).permute(0, 2, 1, 3)  
         
         # (batch_size, h, max_len, d_k) matmul (batch_size, h, d_k, max_len) --> (batch_size, h, max_len, max_len)
-        scores = torch.matmul(query, key.permute(0, 1, 3, 2)) / math.sqrt(query.size(-1))
+        scores = einsum(query, key, "batch head sequence_len_1 head_dimension, batch head sequence_len_2 head_dimension -> batch head sequence_len_1 sequence_len_2")
+        #scores = torch.matmul(query, rearrange(key, "batch head sequence_len head_dimension -> batch head head_dimension sequence_len")) / math.sqrt(self.d_k)
+        #scores = torch.matmul(query, key.permute(0, 1, 3, 2)) / math.sqrt(query.size(-1))
 
         # fill 0 mask with super small number so it wont affect the softmax weight
         # (batch_size, h, max_len, max_len)
@@ -300,10 +307,12 @@ class MultiHeadedAttention(torch.nn.Module):
         weights = self.dropout(weights)
 
         # (batch_size, h, max_len, max_len) matmul (batch_size, h, max_len, d_k) --> (batch_size, h, max_len, d_k)
-        context = torch.matmul(weights, value)
+        context = einsum(weights, value, "batch head seq_1 seq_2, batch head seq_2 d_k -> batch head seq_1 d_k")
+        #context = torch.matmul(weights, value)
 
         # (batch_size, h, max_len, d_k) --> (batch_size, max_len, h, d_k) --> (batch_size, max_len, d_model)
-        context = context.permute(0, 2, 1, 3).contiguous().view(context.shape[0], -1, self.heads * self.d_k)
+        context = rearrange(context, "batch_size head seq_len d_k -> batch_size seq_len (head  d_k)")
+        #context = context.permute(0, 2, 1, 3).contiguous().view(context.shape[0], -1, self.heads * self.d_k)
 
         # (batch_size, max_len, d_model)
         return self.output_linear(context)
@@ -382,7 +391,11 @@ class BERT(torch.nn.Module):
     def forward(self, x, segment_info):
         # attention masking for padded token
         # (batch_size, 1, seq_len, seq_len)
-        mask = (x > 0).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        #print(f"x.shape {x.shape}")
+        #mask = (x > 0).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        mask = repeat((x > 0), "batch_size seq_len -> batch_size one seq_len seq_len2", seq_len2 = x.size(1), one = 1)
+        #mask = repeat(mask, "batch_size seq_len1 seq_len2 -> batch_size one seq_len1 seq_len2", one = 1)
+        #print(f"mask shape : {mask.shape}")
 
         # embedding the indexed sequence to sequence of vectors
         # x -> (batch_size, seq_len, d_embedding_dimension)
@@ -607,7 +620,7 @@ def main():
     )
 
     bert_lm = BERTLM(bert_model, len(tokenizer.vocab))
-    bert_trainer = BERTTrainer(bert_lm, train_loader, device='cuda')
+    bert_trainer = BERTTrainer(bert_lm, train_loader, device='cpu')
     epochs = 20
 
     for epoch in range(epochs):
