@@ -100,7 +100,7 @@ def is_headless():
         return True
 
 
-def predict_action(observation, policy, device, use_amp):
+def predict_action(observation, policy, device, use_amp, single_task: str):
     observation = copy(observation)
     with (
         torch.inference_mode(),
@@ -113,7 +113,7 @@ def predict_action(observation, policy, device, use_amp):
                 observation[name] = observation[name].permute(2, 0, 1).contiguous()
             observation[name] = observation[name].unsqueeze(0)
             observation[name] = observation[name].to(device)
-
+        observation['task'] = [single_task]
         # Compute the next action with the policy
         # based on the current observation
         action = policy.select_action(observation)
@@ -260,7 +260,7 @@ def control_loop(
             observation = robot.capture_observation()
 
             if policy is not None:
-                pred_action = predict_action(observation, policy, device, use_amp)
+                pred_action = predict_action(observation, policy, device, use_amp, single_task)
                 # Action can eventually be clipped using `max_relative_target`,
                 # so action actually sent is saved in the dataset.
                 action = robot.send_action(pred_action)
