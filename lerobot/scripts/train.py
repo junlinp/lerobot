@@ -172,6 +172,7 @@ def train(cfg: TrainPipelineConfig):
             drop_n_last_frames=cfg.policy.drop_n_last_frames,
             shuffle=True,
         )
+        logging.info(f"EpisodeAwareSampler with drop_n_first_frames:{cfg.policy.drop_n_first_frames} drop_n_last_frames:{cfg.policy.drop_n_last_frames}")
     else:
         shuffle = True
         sampler = None
