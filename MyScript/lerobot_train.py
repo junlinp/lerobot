@@ -4,9 +4,11 @@ import torch
 from lerobot.common.datasets.utils import cycle
 from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
 from typing import Iterator
+from MyScript.vit import ViTPolicy
+import tqdm
 
 repo_id = "lerobot/aloha_sim_transfer_cube_scripted"
-repo_id = "dragon-95/so100_sorting_3"
+#repo_id = "dragon-95/so100_sorting_3"
 root=None
 
 class EpisodeSampler(torch.utils.data.Sampler):
@@ -41,13 +43,37 @@ policy_path="/home/junlinp/checkpoint"
 kwargs ={}
 kwargs["pretrained_name_or_path"] = policy_path
 
-print(f"Load Policy")
-policy = PI0Policy.from_pretrained(**kwargs)
-
-
+#print(f"Load Policy")
+#policy = PI0Policy.from_pretrained(**kwargs)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 index = 0;
-for batch in dataloader:
-    action = policy.select_action(batch)
-    print(f"index {index} Action: {action}")
-    index+=1
+policy = ViTPolicy(output_dim=14)
+policy = policy.to(device)
+loss = 0
+opt = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+
+for epoch in range(128):
+    mean_loss = 0
+    for batch in tqdm.tqdm(dataloader):
+        #print(f"batch {batch}")
+        #print(f"batch {batch['observation.images.top'].shape}")
+
+        opt.zero_grad()
+        x = {
+            "imgs": batch['observation.images.top'].to(device)
+        }
+        action = batch['action'].to(device)
+        predict_action = policy.forward(x)
+        #print(f"predict_action shape {predict_action.shape}")
+        #print(f"action shape {action.shape}")
+        loss = torch.mean((action - predict_action)**2)
+        mean_loss += loss.item()
+        loss.backward()
+        opt.step()
+    print(f"Epoch {epoch} loss : {mean_loss / len(dataset)}")
+
+torch.save(policy.state_dict(), "vit_policy.pth")
+
+    

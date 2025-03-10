@@ -122,27 +122,21 @@ def cal_position_embedding(sequence_len:int, token_dim: int) -> torch.Tensor:
 
 
 class VisualTransform(torch.nn.Module):
+    def __init__(self, patch_kernel_size: int, output_dim: int):
 
-    def __init__(self, patch_kernel_size: int, class_number: int):
         super(VisualTransform, self).__init__()
         self.token_dim = 512
         self.layer_num = 12
         self.patch_kernel_size = patch_kernel_size
-
-        self.embedding_weight = torch.nn.Linear(3 * 16 * 16, self.token_dim, class_number)
-
+        self.embedding_weight = torch.nn.Linear(3 * 16 * 16, self.token_dim)
         # conv implement
         #self.embedding_weight = torch.nn.Conv2d(3, self.token_dim, kernel_size=16, stride=16)
-
         self.attention_layer = torch.nn.ModuleList([
             MultiHeadAttention(8, self.token_dim) for i in range(self.layer_num)
         ])
-
-        self.project = torch.nn.Linear(self.token_dim, class_number)
+        self.project = torch.nn.Linear(self.token_dim, output_dim)
         self.activate = torch.nn.GELU()
-        self.softmax = torch.nn.Softmax(dim=1)
         self.class_token = torch.nn.Parameter(torch.randn(self.token_dim,))
-
         self.LN = torch.nn.LayerNorm(self.token_dim)
 
     def forward(self, x):
@@ -167,7 +161,28 @@ class VisualTransform(torch.nn.Module):
             x = layer.forward(x, x, x) + x
 
         projected_output = self.project(x[:, 0, :]) 
-        return self.softmax(einops.rearrange(projected_output,"batch_size cls_dim token_dim -> batch_size (cls_dim token_dim)", cls_dim = 1))
+        return projected_output
+        #return einops.rearrange(projected_output,"batch_size cls_dim token_dim -> batch_size (cls_dim token_dim)", cls_dim = 1)
+
+class ViTClassifier(torch.nn.Module):
+
+    def __init__(self, class_num: int):
+        super(ViTClassifier, self).__init__()
+        self.class_num = class_num
+        self.model = VisualTransform(16, class_num)
+        self.softmax = torch.nn.Softmax(dim=1)
+
+    def forward(self, x:torch.Tensor)->torch.Tensor:
+        output_logit = self.model.forward(x)
+        return self.softmax(output_logit)
+
+class ViTPolicy(torch.nn.Module):
+    def __init__(self, output_dim:int):
+        super(ViTPolicy, self).__init__()
+        self.model = VisualTransform(16, output_dim)
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        img_data = batch['imgs']
+        return self.model.forward(img_data)
 
 
 
