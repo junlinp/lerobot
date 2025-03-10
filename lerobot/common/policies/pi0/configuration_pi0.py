@@ -85,6 +85,12 @@ class PI0Config(PreTrainedConfig):
     scheduler_decay_steps: int = 30_000
     scheduler_decay_lr: float = 2.5e-6
 
+
+    # drop_n_last_frames: Number of frames to drop from the end of each episode. for train
+    drop_n_last_frames: int = 0
+    # drop_n_first_frames: Number of frames to drop from the start of each episode. for train
+    drop_n_first_frames: int = 0
+
     # TODO: Add EMA
 
     def __post_init__(self):
