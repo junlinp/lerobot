@@ -6,6 +6,9 @@ import math
 import os
 import einops
 
+from MyScript.transformer import Transformer
+from MyScript.diffusion import MLPDiffusion
+
 def unpickle(file_path):
     import pickle
     with open(file_path, 'rb') as fo:
@@ -50,57 +53,8 @@ class CifarDataset(Dataset):
     def __getitem__(self, index):
         return self.data[index,:], self.label[index]
 
-class FeedForward(torch.nn.Module):
-    def __init__(self, model_dim:int = 512, hidden_dim:int = 2048):
-        super(FeedForward, self).__init__()
-        self.W1 = torch.nn.Linear(model_dim, hidden_dim)
-        self.W2 = torch.nn.Linear(hidden_dim, model_dim)
-        self.dropout = torch.nn.Dropout(0.1)
-        # paper use a max operator
-        # we use a ReLU replace
-        self.activate = torch.nn.ReLU()
-
-    def forward(self, x:torch.tensor):
-        x = self.W1(x)
-        x = self.activate(x)
-        return self.W2(self.dropout(x))
 
 
-class MultiHeadAttention(torch.nn.Module):
-
-    def __init__(self,heads: int, model_dim: int, dropout:float = 0.1):
-        super(MultiHeadAttention, self).__init__()
-        assert model_dim % heads == 0
-        self.heads = heads
-        self.k_dim = model_dim // heads
-        self.query_weight = torch.nn.Linear(model_dim, model_dim)
-        self.key_weight = torch.nn.Linear(model_dim, model_dim)
-        self.value_weight = torch.nn.Linear(model_dim, model_dim)
-
-        self.LN = torch.nn.LayerNorm(model_dim)
-        self.dropout = torch.nn.Dropout(dropout)
-        self.ff_layer = FeedForward(model_dim = model_dim)
-        
-
-    def forward(self, query, key, value, mask: torch.Tensor | None = None) -> torch.Tensor:
-        assert query.size(-1) == self.heads * self.k_dim
-        query = self.query_weight(query)
-        key = self.key_weight(key)
-        value = self.value_weight(value)
-        query = einops.rearrange(query, "batch_size sequence_len (head_n head_dim) -> batch_size sequence_len head_n head_dim", head_n = self.heads, head_dim = self.k_dim)
-        key = einops.rearrange(key, "batch_size sequence_len (head_n head_dim) -> batch_size sequence_len head_n head_dim", head_n = self.heads, head_dim = self.k_dim)
-        value = einops.rearrange(value, "batch_size sequence_len (head_n head_dim) -> batch_size sequence_len head_n head_dim", head_n = self.heads, head_dim = self.k_dim)
-        scores = einops.einsum(query, key, "batch_size sequence_length_1 head_n head_dim, batch_size sequence_length_2 head_n head_dim -> batch_size head_n sequence_length_1 sequence_length_2") / math.sqrt(self.k_dim)
-        if mask is not None:
-            scores.masked_fill(mask == 0, float('-inf'))
-
-        logits = torch.nn.functional.softmax(scores, dim=-1)
-        logits = self.dropout(logits)
-        attention = einops.einsum(logits, value, "batch_size head_n seq_1 seq_2, batch_size seq_2 head_n head_dim -> batch_size seq_1 head_n head_dim")
-        attention = einops.rearrange(attention, "batch_size seq_len head_n head_dim -> batch_size seq_len (head_n head_dim)")
-        feed_forward_input = self.LN(attention)
-        ff_output = self.ff_layer.forward(feed_forward_input)
-        return feed_forward_input + ff_output
 
 
 
@@ -122,18 +76,24 @@ def cal_position_embedding(sequence_len:int, token_dim: int) -> torch.Tensor:
 
 
 class VisualTransform(torch.nn.Module):
-    def __init__(self, patch_kernel_size: int, output_dim: int):
+    def __init__(self, image_width:int, image_height:int, patch_kernel_size: int, output_dim: int):
 
         super(VisualTransform, self).__init__()
+        self.image_width = image_width
+        self.image_height = image_height
         self.token_dim = 512
-        self.layer_num = 12
+        self.layer_num = 6
         self.patch_kernel_size = patch_kernel_size
+
+        
         self.embedding_weight = torch.nn.Linear(3 * 16 * 16, self.token_dim)
         # conv implement
         #self.embedding_weight = torch.nn.Conv2d(3, self.token_dim, kernel_size=16, stride=16)
-        self.attention_layer = torch.nn.ModuleList([
-            MultiHeadAttention(8, self.token_dim) for i in range(self.layer_num)
-        ])
+        #self.attention_layer = torch.nn.ModuleList([
+            #MultiHeadAttention(8, self.token_dim) for i in range(self.layer_num)
+        #])
+        self.transformer_model = Transformer(self.token_dim, self.layer_num, 1024, 8, 0.1)
+
         self.project = torch.nn.Linear(self.token_dim, output_dim)
         self.activate = torch.nn.GELU()
         self.class_token = torch.nn.Parameter(torch.randn(self.token_dim,))
@@ -156,12 +116,12 @@ class VisualTransform(torch.nn.Module):
         x = x + pos_embeding
 
         # self-attension
-        for layer in self.attention_layer:
-            x = self.LN(x)
-            x = layer.forward(x, x, x) + x
+        x = self.LN(x)
+        #print(f"x.shape : {x.shape}")
+        x = self.transformer_model.forward(x)
 
         projected_output = self.project(x[:, 0, :]) 
-        return projected_output
+        return projected_output, x[:, 1:, :]
         #return einops.rearrange(projected_output,"batch_size cls_dim token_dim -> batch_size (cls_dim token_dim)", cls_dim = 1)
 
 class ViTClassifier(torch.nn.Module):
@@ -177,13 +137,47 @@ class ViTClassifier(torch.nn.Module):
         return self.softmax(output_logit)
 
 class ViTPolicy(torch.nn.Module):
-    def __init__(self, output_dim:int):
+    def __init__(self, chunk_size:int, action_dim:int, image_width: int= 224, image_height: int = 224):
         super(ViTPolicy, self).__init__()
-        self.model = VisualTransform(16, output_dim)
+        self.patch_size = 16
+        self.visual_output_dim = 512
+        self.visual_encoder = VisualTransform(image_width, image_height,self.patch_size, output_dim=self.visual_output_dim)
+        self.patch_num = image_width // self.patch_size * image_height // self.patch_size
+
+        self.chunk = chunk_size
+        self.action_dim = action_dim
+        self.buffer_action = []
+
+        self.diffusion_mode = MLPDiffusion(visual_input_dim = self.patch_num * self.visual_output_dim, action_input_dim=self.chunk * self.action_dim, output_dim = self.chunk * self.action_dim, time_dim=1, num_blocks=8, dropout_rate=0.1, hidden_dim=512, use_layer_norm=False)
+        
     def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         img_data = batch['imgs']
         return self.model.forward(img_data)
 
+    def compute_loss(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        img_data = batch['imgs']
+        action = batch['action'] 
+        #action = einops.rearrange(action, "batch chunk_size action_dim -> batch (chunk_size action_dim)")
+        visual_class, visual_token = self.visual_encoder(img_data)
+        visual_token = einops.rearrange(visual_token, "batch patch_num token_dim -> batch (patch_num token_dim)")
+        # TODO (junlinp): diffusion
+        return self.diffusion_mode.compute_loss(visual_token, action)
+
+    def predict_action(self, batch:dict[str, torch.Tensor]) ->torch.Tensor:
+        if len(self.buffer_action) <= 0:
+            img_data = batch['imgs']
+            action_chunk = self.model.forward(img_data)
+            list_action = einops.rearrange(action_chunk, "batch (chunk action_dim) -> batch chunk action_dim", chunk = self.chunk)
+
+            actions = list_action.cpu().squeeze(0)
+            for i in range(self.chunk):
+                self.buffer_action.append(actions[i, :])
+
+        return self.buffer_action.pop()
+            
+
+
+        
 
 
 def main():
