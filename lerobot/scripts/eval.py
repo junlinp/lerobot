@@ -460,7 +460,7 @@ def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
 
     # Check device is available
-    device = get_safe_torch_device(cfg.device, log=True)
+    device = get_safe_torch_device(cfg.policy.device, log=True)
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -473,14 +473,14 @@ def eval_main(cfg: EvalPipelineConfig):
     text_input = [TaskText[cfg.env.task] for i in range(cfg.eval.batch_size)]
     env = make_env(cfg.env, n_envs=cfg.eval.batch_size, use_async_envs=cfg.eval.use_async_envs)
     logging.info("Making policy.")
+
     policy = make_policy(
         cfg=cfg.policy,
-        device=device,
         env_cfg=cfg.env,
     )
     policy.eval()
 
-    with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.use_amp else nullcontext():
+    with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext():
         info = eval_policy(
             env,
             policy,
