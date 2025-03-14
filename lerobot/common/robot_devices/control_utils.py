@@ -253,7 +253,7 @@ def control_loop(
 
             if policy is not None:
                 pred_action = predict_action(
-                    observation, policy, get_safe_torch_device(policy.config.device), policy.config.use_amp
+                    observation, policy, get_safe_torch_device(policy.config.device), policy.config.use_amp,single_task
                 )
                 # Action can eventually be clipped using `max_relative_target`,
                 # so action actually sent is saved in the dataset.
