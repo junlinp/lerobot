@@ -265,6 +265,16 @@ def record(
             image_writer_processes=cfg.num_image_writer_processes,
             image_writer_threads=cfg.num_image_writer_threads_per_camera * len(robot.cameras),
         )
+    if cfg.policy is not None:
+        # asign the feature size from policy
+        for key, policy_feature in cfg.policy.input_features.items():
+            dataset.meta.features[key]['shape'] = policy_feature.shape
+            dataset.features[key]['shape'] = policy_feature.shape
+        
+        for key, policy_feature in cfg.policy.output_features.items():
+            dataset.meta.features[key]['shape'] = policy_feature.shape
+            dataset.features[key]['shape'] = policy_feature.shape
+        dataset.hf_dataset = dataset.create_hf_dataset()
 
     # Load pretrained policy
     policy = None if cfg.policy is None else make_policy(cfg.policy, ds_meta=dataset.meta)
