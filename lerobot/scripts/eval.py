@@ -155,6 +155,9 @@ def rollout(
             key: observation[key].to(device, non_blocking=device.type == "cuda") for key in observation
         }
 
+        if hasattr(env, "get_language_instruction"):
+            observation['task'] = env.get_attr("get_language_instruction")
+
         with torch.inference_mode():
             action = policy.select_action(observation)
 

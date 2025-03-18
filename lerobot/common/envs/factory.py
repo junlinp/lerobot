@@ -16,8 +16,9 @@
 import importlib
 
 import gymnasium as gym
+import simpler_env
 
-from lerobot.common.envs.configs import AlohaEnv, EnvConfig, PushtEnv, XarmEnv
+from lerobot.common.envs.configs import AlohaEnv, EnvConfig, PushtEnv, XarmEnv, SimplerEnv
 
 
 def make_env_config(env_type: str, **kwargs) -> EnvConfig:
@@ -49,8 +50,10 @@ def make_env(cfg: EnvConfig, n_envs: int = 1, use_async_envs: bool = False) -> g
     """
     if n_envs < 1:
         raise ValueError("`n_envs must be at least 1")
-
-    package_name = f"gym_{cfg.type}"
+    if cfg.type == "simpler":
+        package_name = "simpler_env"
+    else:
+        package_name = f"gym_{cfg.type}"
 
     try:
         importlib.import_module(package_name)
@@ -58,12 +61,16 @@ def make_env(cfg: EnvConfig, n_envs: int = 1, use_async_envs: bool = False) -> g
         print(f"{package_name} is not installed. Please install it with `pip install 'lerobot[{cfg.type}]'`")
         raise e
 
-    gym_handle = f"{package_name}/{cfg.task}"
-
-    # batched version of the env that returns an observation of shape (b, c)
-    env_cls = gym.vector.AsyncVectorEnv if use_async_envs else gym.vector.SyncVectorEnv
-    env = env_cls(
-        [lambda: gym.make(gym_handle, disable_env_checker=True, **cfg.gym_kwargs) for _ in range(n_envs)]
-    )
+    if cfg.type == "simpler":
+        env_handle = cfg.task
+        env_cls = gym.vector.AsyncVectorEnv if use_async_envs else gym.vector.SyncVectorEnv
+        env = env_cls([lambda:simpler_env.make(env_handle, **cfg.gym_kwargs) for _ in range(n_envs)])
+    else:
+        gym_handle = f"{package_name}/{cfg.task}"
+        # batched version of the env that returns an observation of shape (b, c)
+        env_cls = gym.vector.AsyncVectorEnv if use_async_envs else gym.vector.SyncVectorEnv
+        env = env_cls(
+            [lambda: gym.make(gym_handle, disable_env_checker=True, **cfg.gym_kwargs) for _ in range(n_envs)]
+        )
 
     return env

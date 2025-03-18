@@ -21,9 +21,11 @@ from torch import Tensor
 from lerobot.common.envs.configs import EnvConfig
 from lerobot.common.utils.utils import get_channel_first_image_shape
 from lerobot.configs.types import FeatureType, PolicyFeature
+import gymnasium as gym
 
 
-def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Tensor]:
+def preprocess_observation(
+        observations: dict[str, np.ndarray]) -> dict[str, Tensor]:
     # TODO(aliberts, rcadene): refactor this to use features from the environment (no hardcoding)
     """Convert environment observation to LeRobot format observation.
     Args:
@@ -56,6 +58,21 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
             img /= 255
 
             return_observations[imgkey] = img
+    if "image" in observations:
+        camera_names = ["overhead_camera", "3rd_view_camera"]
+        for camera_name in camera_names:
+            if camera_name in observations['image']:
+                image = observations["image"][camera_name]["rgb"]
+                break
+        imgs = {"observation.image" : image}
+        for imgkey, img in imgs.items():
+            img = torch.from_numpy(img)
+            _, h, w, c = img.shape
+            img = einops.rearrange(img, "b h w c -> b c h w").contiguous()
+            img = img.type(torch.float32)
+            img /= 255
+            return_observations[imgkey] = img
+    
 
     if "environment_state" in observations:
         return_observations["observation.environment_state"] = torch.from_numpy(
@@ -64,7 +81,11 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
 
     # TODO(rcadene): enable pixels only baseline with `obs_type="pixels"` in environment by removing
     # requirement for "agent_pos"
-    return_observations["observation.state"] = torch.from_numpy(observations["agent_pos"]).float()
+
+    if "agent" in observations:
+        return_observations["observation.agent_pos"] = torch.from_numpy(observations['agent']['qpos'])
+    else:
+        return_observations["observation.state"] = torch.from_numpy(observations["agent_pos"]).float()
     return return_observations
 
 

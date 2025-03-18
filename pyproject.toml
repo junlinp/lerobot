@@ -72,6 +72,7 @@ dependencies = [
     "torchvision>=0.21.0",
     "wandb>=0.16.3",
     "zarr>=2.17.0",
+    "numpy==1.24.4",
 ]
 
 [project.optional-dependencies]
@@ -95,7 +96,10 @@ test = ["pytest>=8.1.0", "pytest-cov>=5.0.0", "pyserial>=3.5"]
 umi = ["imagecodecs>=2024.1.1"]
 video_benchmark = ["scikit-image>=0.23.2", "pandas>=2.2.2"]
 xarm = ["gym-xarm>=0.1.1 ; python_version < '4.0'"]
-
+simpler_env = [
+   "simpler_env @ git+https://github.com/junlinp/SimplerEnv.git@b02cb7ff26dce2231cd38686cbbad167935d921e", 
+    "mani_skill2_real2sim @ git+https://github.com/simpler-env/ManiSkill2_real2sim.git@ef7a4d4fdf4b69f2c2154db5b15b9ac8dfe10682"
+]
 [tool.poetry]
 requires-poetry = ">=2.1"
 
