@@ -1,0 +1,13 @@
+python lerobot/scripts/control_robot.py \
+    --robot.type=so100 \
+    --control.type=record \
+    --control.display_cameras=false \
+    --control.fps=30 \
+    --control.single_task="pick the pen into basket" \
+    --control.repo_id=junlinp/so100_50_episodes \
+    --control.tags='["so100", "tutorial"]' \
+    --control.warmup_time_s=10 \
+    --control.episode_time_s=25 \
+    --control.reset_time_s=10 \
+    --control.num_episodes=50 \
+    --control.push_to_hub=false
