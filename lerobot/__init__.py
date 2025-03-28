@@ -86,8 +86,6 @@ available_datasets_per_env = {
         "lerobot/xarm_push_medium_image",
         "lerobot/xarm_push_medium_replay_image",
     ],
-    # TODO(junlinp):train datasets
-    "simpler":[]
 }
 
 available_real_world_datasets = [
@@ -176,6 +174,7 @@ available_policies = [
     "diffusion",
     "tdmpc",
     "vqbet",
+    "dm"
 ]
 
 # lists all available robots from `lerobot/common/robot_devices/robots`
@@ -201,12 +200,11 @@ available_motors = [
 
 # keys and values refer to yaml files
 available_policies_per_env = {
-    "aloha": ["act"],
+    "aloha": ["act", "dm"],
     "pusht": ["diffusion", "vqbet"],
     "xarm": ["tdmpc"],
     "koch_real": ["act_koch_real"],
     "aloha_real": ["act_aloha_real"],
-    "simpler" : ["pi0"],
 }
 
 env_task_pairs = [(env, task) for env, tasks in available_tasks_per_env.items() for task in tasks]

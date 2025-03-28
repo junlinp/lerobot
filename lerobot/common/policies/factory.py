@@ -54,6 +54,9 @@ def get_policy_class(name: str) -> PreTrainedPolicy:
         from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
 
         return PI0Policy
+    elif name == "dm":
+        from lerobot.common.policies.dm.modeling_dm import DMPolicy
+        return DMPolicy
     else:
         raise NotImplementedError(f"Policy with name {name} is not implemented.")
 
