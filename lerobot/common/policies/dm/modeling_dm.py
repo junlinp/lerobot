@@ -52,8 +52,16 @@ class DMPolicy(PreTrainedPolicy):
         ]
     @torch.no_grad()
     def select_action(self, batch:dict[str, Tensor]) -> Tensor:
-
-        return Tensor(torch.randn)
+        for key in batch.keys():
+            if key.find("image") >= 0:
+                image_observation = batch[key]
+                #for index in range(image_observation.size(0)):
+                    #print(f"image observation : {image_observation[index, :, :, :].shape}")
+                images = [self.image_transform(image_observation[index, :, :, :]).unsqueeze(0) for index in range(image_observation.size(0))]
+                #print(f" concatenate : {torch.concatenate(images, axis = 0).shape}")
+                batch[key] = torch.concatenate(images, axis = 0)
+        predicted_actions = self.model.forward(batch)
+        return predicted_actions.squeeze(1)
 
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
@@ -115,12 +123,36 @@ class DM(nn.Module):
         return actions
 
 
+class ConditionMAPLayer(nn.Module):
+
+    def __init__(self, query_dim : int, num_heads = 8, dropout_rate:float = 0.1, feedforward_dim:int = 1024):
+        super().__init__()
+        self.attn_layer = torch.nn.MultiheadAttention(query_dim, num_heads=num_heads, dropout=dropout_rate, batch_first=True)
+        self.layer_norm = torch.nn.LayerNorm(query_dim)
+
+        self.feedforward = torch.nn.Sequential(
+            torch.nn.Linear(query_dim, feedforward_dim),
+            torch.nn.SiLU(),
+            torch.nn.Linear(feedforward_dim, query_dim)
+        )
+        self.feedforward_norm = torch.nn.LayerNorm(query_dim)
+
+    def forward(self, query: Tensor, context: Tensor) -> Tensor:
+        attn_output, _ = self.attn_layer(query, context, context)
+        attn_output = self.layer_norm(attn_output + query)
+
+        feedforwad_output = self.feedforward(attn_output)
+
+        return self.feedforward_norm(feedforwad_output + query)
+
+
+        
 class ConditionMultipleHead(nn.Module):
     def __init__(self, query_dim : int, context_dim:int, num_heads = 8, layer_num:int = 6, dropout_rate:float = 0.1):
         super().__init__()
 
         self.model = torch.nn.ModuleList(
-            [torch.nn.MultiheadAttention(query_dim, num_heads, dropout_rate, batch_first=True) for _ in range(layer_num)]
+            [ConditionMAPLayer(query_dim, num_heads, dropout_rate) for _ in range(layer_num)]
         )
 
         self.query_dim = query_dim
@@ -131,7 +163,6 @@ class ConditionMultipleHead(nn.Module):
     def forward(self, query: Tensor, context: Tensor) -> Tensor:
         projected_context = self.context_project(context)
         for lyr in self.model:
-            attn_output, attn_output_weights = lyr(query, projected_context, projected_context)
-            query = attn_output + query
+            query = lyr.forward(query, projected_context)
         return query
 
