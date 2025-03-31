@@ -9,8 +9,8 @@ from lerobot.common.optim.optimizers import AdamWConfig
 @dataclass
 class DMConfig(PreTrainedConfig):
     n_obs_steps: int = 1
-    chunk_size: int = 1
-    n_action_steps: int = 1
+    chunk_size: int = 2
+    n_action_steps: int = 2
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -24,6 +24,8 @@ class DMConfig(PreTrainedConfig):
     optimizer_lr: float = 1e-5
     optimizer_weight_decay: float = 1e-4
     optimizer_lr_backbone: float = 1e-5
+
+    freeze_vision_encoder:bool = True
 
     def __post_init__(self):
         super().__post_init__()
@@ -49,8 +51,7 @@ class DMConfig(PreTrainedConfig):
 
     @property
     def action_delta_indices(self) -> None:#list:
-        return None
-        #return list(range(self.chunk_size))
+        return list(range(self.chunk_size))
 
     @property
     def reward_delta_indices(self) -> None:

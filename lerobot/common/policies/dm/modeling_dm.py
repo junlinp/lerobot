@@ -93,6 +93,12 @@ class DM(nn.Module):
 
         self.project = torch.nn.Linear(768 * 196, 14)
 
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self.config.freeze_vision_encoder:
+            self.visual_encoder.eval()
+
     def forward(self, batch: dict[str, Tensor]) -> Tensor:
         #print(f"forward batch.keys: {batch.keys()}")
 
