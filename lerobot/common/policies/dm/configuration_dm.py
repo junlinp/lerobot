@@ -12,6 +12,10 @@ class DMConfig(PreTrainedConfig):
     chunk_size: int = 2
     n_action_steps: int = 2
 
+    action_time_proj_width: int = 1024
+    max_action_dim: int = 32
+    num_steps : int = 10
+
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.MEAN_STD,
