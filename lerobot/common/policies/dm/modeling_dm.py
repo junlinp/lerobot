@@ -44,8 +44,8 @@ class DMPolicy(PreTrainedPolicy):
 
         self.image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         self.visual_encoder = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-        self.future_image_predictor = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-            "timbrooks/instruct-pix2pix", torch_dtype=torch.float16)
+        #self.future_image_predictor = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+        #    "timbrooks/instruct-pix2pix", torch_dtype=torch.float16)
 
         self.state_project_to_embed = nn.Linear(config.max_action_dim, 768)
 
