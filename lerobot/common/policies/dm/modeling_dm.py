@@ -16,6 +16,7 @@ from lerobot.common.policies.pretrained import PreTrainedPolicy
 from lerobot.common.policies.dm.configuration_dm import DMConfig
 from lerobot.common.policies.utils import get_device_from_parameters, get_output_shape, populate_queues
 from transformers import AutoImageProcessor, ViTModel
+from diffusers import StableDiffusionInstructPix2PixPipeline
 import torchvision.transforms as tv_transforms
 import math
 
@@ -43,6 +44,10 @@ class DMPolicy(PreTrainedPolicy):
 
         self.image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         self.visual_encoder = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        self.future_image_predictor = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+            "timbrooks/instruct-pix2pix", torch_dtype=torch.float16)
+
+        self.state_project_to_embed = nn.Linear(config.max_action_dim, 768)
 
     def reset(self):
         pass
@@ -55,37 +60,77 @@ class DMPolicy(PreTrainedPolicy):
     def get_optim_params(self) -> dict:
         return self.parameters()
 
+    def prepare_future_image(self, batch) -> dict:
+        present_img_keys = [key for key in self.config.image_features if key in batch]
+        missing_img_keys = [key for key in self.config.image_features if key not in batch]
+        if len(present_img_keys) == 0:
+            raise ValueError(
+                f"All image features are missing from the batch input. At least one expected.(batch: {batch.keys()}) (image_features needed : {self.config.image_features})"
+            )
+
+        images = []
+        for key in present_img_keys:
+            img = batch[key]
+            #print(f"img.shape : {img.shape}")
+            img = [self.image_transform(img[index, 1, :, :, :]).unsqueeze(0) for index in range(img.size(0))]
+            images.append(torch.concatenate(img, axis = 0))
+        return images
+        pass 
+
+
+    def pixelValueNormal(self, image: Tensor) -> dict:
+        return self.image_transform(image)
+
+    def prepare_state(self, batch:dict) -> Tensor:
+        state = batch['observation.state']
+        return self.state_project_to_embed(pad_vector(state, self.config.max_state_dim))
+
+    def prepare_images(self, batch:dict) -> list[Tensor]:
+        present_img_keys = [key for key in self.config.image_features if key in batch]
+        missing_img_keys = [key for key in self.config.image_features if key not in batch]
+        if len(present_img_keys) == 0:
+            raise ValueError(
+                f"All image features are missing from the batch input. At least one expected.(batch: {batch.keys()}) (image_features needed : {self.config.image_features})"
+            )
+
+        images = []
+        for key in present_img_keys:
+            img = batch[key]
+            #print(f"img.shape : {img.shape}")
+            img = [self.image_transform(img[index,:, :, :]).unsqueeze(0) for index in range(img.size(0))]
+            images.append(torch.concatenate(img, axis = 0))
+        return images
+
+    def embed_image(self, image:Tensor) -> Tensor:
+            input_dict = {
+                "pixel_values" : image,
+                "output_hidden_states" : True
+            }
+            visual_embed = self.visual_encoder(**input_dict)
+            # shape (batch, 196, embed_dim)
+            return visual_embed.last_hidden_state[:, 1:, :]
+    def predict_future_image(self, prompts: list[str], images:list[Tensor]) -> list[Tensor]:
+        predict_images = []
+        for batch_image in images:
+            batch_image = batch_image * 0.5 + 0.5
+            list_image = [batch_image[index, :, : , :].squeeze(0) for index in range(batch_image.size(0))]
+            torch.concatenate(self.future_image_predictor(prompt = prompts, image = list_image,output_type="pt"), axis = 0)
+        return 2.0 * (predict_images - 0.5)
+
+
     @torch.no_grad()
     def select_action(self, batch:dict[str, Tensor]) -> Tensor:
-        for key in batch.keys():
-            if key.find("image") >= 0:
-                image_observation = batch[key]
-                #for index in range(image_observation.size(0)):
-                    #print(f"image observation : {image_observation[index, :, :, :].shape}")
-                images = [self.image_transform(image_observation[index, :, :, :]).unsqueeze(0) for index in range(image_observation.size(0))]
-                #print(f" concatenate : {torch.concatenate(images, axis = 0).shape}")
-                batch[key] = torch.concatenate(images, axis = 0)
-
-        image_observation = []
-        for key in batch.keys():
-            if key.find("image") >= 0:
-                input = batch[key]
-                #print(f"image input : {input.shape}")
-                #resize_image = self.image_processor(input, return_tensors="pt")
-                input_dict = {
-                    "pixel_values" : batch[key],
-                    "output_hidden_states" : True
-                }
-                visual_embed = self.visual_encoder(**input_dict)
-                # shape (batch, 196, embed_dim)
-                #print(f"hidden_states : {visual_embed.hidden_states}") 
-                image_observation.append(visual_embed.last_hidden_state[:, 1:, :])
-
+        images = self.prepare_images(batch)
+        image_observation = [self.embed_image(image) for image in images]
         if len(image_observation) > 1:
             image_embed = torch.concatenate(image_observation, axis = 1) 
         else:
             image_embed = image_observation[0]
-        predicted_actions = self.model.sample_actions(image_embed=image_embed)
+        state_embed = self.prepare_state(batch).unsqueeze(1)
+        
+
+        image_and_state_embed = torch.concatenate([image_embed, state_embed], axis = 1)
+        predicted_actions = self.model.sample_actions(image_and_state_embed=image_and_state_embed)
 
         original_action_dim = self.config.action_feature.shape[0]
         predicted_actions = predicted_actions[:, :, :original_action_dim]
@@ -94,44 +139,49 @@ class DMPolicy(PreTrainedPolicy):
 
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
-        for key in batch.keys():
-            if key.find("image") >= 0:
-                image_observation = batch[key]
-                #for index in range(image_observation.size(0)):
-                    #print(f"image observation : {image_observation[index, :, :, :].shape}")
-                images = [self.image_transform(image_observation[index, :, :, :]).unsqueeze(0) for index in range(image_observation.size(0))]
-                #print(f" concatenate : {torch.concatenate(images, axis = 0).shape}")
-                batch[key] = torch.concatenate(images, axis = 0)
+        #print(f"batch.keys() : {batch.keys()}")
+        instruction = batch['task']
+        #print(f"instruction : {instruction}")
+        images = self.prepare_images(batch)
+        #future_images = self.prepare_future_image(batch)
+        #predict_future_images = self.predict_future_image(instruction,images)
 
-        image_observation = []
-        for key in batch.keys():
-            if key.find("image") >= 0:
-                input = batch[key]
-                input_dict = {
-                    "pixel_values" : batch[key],
-                    "output_hidden_states" : True
-                }
-                visual_embed = self.visual_encoder(**input_dict)
-                # shape (batch, 196, embed_dim)
-                #print(f"hidden_states : {visual_embed.hidden_states}") 
-                image_observation.append(visual_embed.last_hidden_state[:, 1:, :])
+        #reconstruction_loss = 0         
+
+        #for future_image, predict_future_image in zip(future_images, predict_future_images):
+        #   reconstruction_loss += torch.mean(future_image - predict_future_image)
+
+        image_observation = [self.embed_image(image) for image in images]
 
         if len(image_observation) > 1:
             image_embed = torch.concatenate(image_observation, axis = 1) 
         else:
             image_embed = image_observation[0]
 
-        batch = self.normalize_inputs(batch)
-        batch = self.normalize_targets(batch)
+        state_embed = self.prepare_state(batch).unsqueeze(1)
 
+        #batch = self.normalize_inputs(batch)
+        batch = self.normalize_targets(batch)
         normalized_actions = batch['action']
 
-        #predicted_actions = 
-        return self.model.forward(image_embed=image_embed, actions=pad_vector(normalized_actions, self.config.max_action_dim))
+        actions_is_pad = batch.get("actions_is_pad")
 
-        loss = self.loss_fn(predicted_actions, normalized_actions)
-        lost_dict = {}
-        return Tensor(loss), lost_dict
+        if actions_is_pad is not None:
+            in_episode_bound = ~actions_is_pad
+            losses = losses * in_episode_bound.unsqueeze(-1)
+            loss_dict["losses_after_in_ep_bound"] = losses.clone()
+
+        image_and_state_embed = torch.concatenate([image_embed, state_embed], axis = 1)
+        losses = self.model.forward(image_and_state_embed= image_and_state_embed, actions=pad_vector(normalized_actions, self.config.max_action_dim))
+
+        loss_dict = {"losses_after_forward" : losses.clone()}
+
+        #print(f"losses.shape : {losses.shape}")
+        losses = losses[:, :, :normalized_actions.shape[-1]]
+        #print(f"unpad_losses.shape : {losses.shape}")
+        loss = losses.mean() 
+        return loss, loss_dict
+
 
 def pad_vector(vector:torch.Tensor, new_dim:int) -> torch.Tensor:
     if vector.shape[-1] == new_dim:
@@ -173,16 +223,13 @@ class DM(nn.Module):
     def __init__(self, config:DMConfig):
         super().__init__()
         self.config = config
-
-
-        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8)
-
+        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8, layer_num=32)
         self.project = torch.nn.Linear(768 * 196, 14)
-
         self.action_proj_action_time_embed = torch.nn.Linear(self.config.max_action_dim, self.config.action_time_proj_width)
         self.action_time_mlp_in = torch.nn.Linear(self.config.action_time_proj_width * 2, self.config.action_time_proj_width)
         self.action_time_mlp_out = torch.nn.Linear(self.config.action_time_proj_width, self.config.action_time_proj_width)
         self.action_out_proj = torch.nn.Linear(self.config.action_time_proj_width, self.config.max_action_dim)
+
     def train(self, mode: bool = True):
         super().train(mode)
 
@@ -200,26 +247,24 @@ class DM(nn.Module):
         time = time_beta * 0.999 + 0.001
         return time.to(dtype=torch.float32, device=device)
 
-    def forward(self, image_embed: Tensor, actions: Tensor) -> Tensor:
+    def forward(self, image_and_state_embed: Tensor, actions: Tensor) -> Tensor:
 
         timestep = self.sample_time(actions.shape[0], actions.device)
         time_expanded = einops.repeat(timestep, "batch -> batch seq_len action_dim", seq_len = actions.size(1), action_dim = actions.size(2))
         noise = self.sample_noise(actions.shape, actions.device)
         x_t = time_expanded * noise + ( 1 - time_expanded) * actions
         u_t = noise - actions
-        batch_size = image_embed.size(0)
+        batch_size = image_and_state_embed.size(0)
 
         action_time_embed = self.create_action_time_emb(x_t, timestep)
-        diffusion_out = self.condition_action_policy.forward(action_time_embed, image_embed)
+        diffusion_out = self.condition_action_policy.forward(action_time_embed, image_and_state_embed)
         v_t = self.action_out_proj(diffusion_out)
-
-        losses = torch.nn.functional.mse_loss(u_t, v_t, reduce="none")
-        losses_dict = {"l2_loss" : losses.item()}
-        return losses, losses_dict
+        losses = torch.nn.functional.mse_loss(u_t, v_t, reduction="none")
+        return losses
     
-    def sample_actions(self, image_embed:Tensor) -> Tensor:
-        batch_size = image_embed.shape[0]
-        device = image_embed.device
+    def sample_actions(self, image_and_state_embed:Tensor) -> Tensor:
+        batch_size = image_and_state_embed.shape[0]
+        device = image_and_state_embed.device
 
         dt = -1.0 / self.config.num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
@@ -232,7 +277,7 @@ class DM(nn.Module):
             expanded_time = time.expand(batch_size)
             #expanded_time = einops.repeat(expanded_time, "batch_size -> batch_size action_seq action_dim", batch_size = batch_size, action_seq = self.config.n_action_steps, action_dim = self.config.max_action_dim)
             v_t = self.denoise_step(
-                image_embed,
+                 image_and_state_embed,
                 x_t,
                 expanded_time
             )
@@ -255,9 +300,9 @@ class DM(nn.Module):
         action_time_emb = self.action_time_mlp_out(action_time_emb)
         return action_time_emb
 
-    def denoise_step(self, image_embed:Tensor, x_t:Tensor, timestep:Tensor)->Tensor:
+    def denoise_step(self, image_and_state_embed:Tensor, x_t:Tensor, timestep:Tensor)->Tensor:
         action_time_emb = self.create_action_time_emb(x_t, timestep)
-        v_t = self.condition_action_policy.forward(action_time_emb, image_embed) 
+        v_t = self.condition_action_policy.forward(action_time_emb, image_and_state_embed) 
         return self.action_out_proj(v_t)
 
 

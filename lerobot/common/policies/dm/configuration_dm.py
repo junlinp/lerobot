@@ -14,6 +14,7 @@ class DMConfig(PreTrainedConfig):
 
     action_time_proj_width: int = 1024
     max_action_dim: int = 32
+    max_state_dim : int = 32
     num_steps : int = 10
 
     normalization_mapping: dict[str, NormalizationMode] = field(
@@ -25,7 +26,7 @@ class DMConfig(PreTrainedConfig):
     )
 
 
-    optimizer_lr: float = 1e-5
+    optimizer_lr: float = 2.5e-5
     optimizer_weight_decay: float = 1e-4
     optimizer_lr_backbone: float = 1e-5
 
