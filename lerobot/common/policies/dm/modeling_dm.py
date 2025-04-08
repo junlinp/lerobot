@@ -223,7 +223,7 @@ class DM(nn.Module):
     def __init__(self, config:DMConfig):
         super().__init__()
         self.config = config
-        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8, layer_num=128)
+        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8, layer_num=32)
         self.project = torch.nn.Linear(768 * 196, 14)
         self.action_proj_action_time_embed = torch.nn.Linear(self.config.max_action_dim, self.config.action_time_proj_width)
         self.action_time_mlp_in = torch.nn.Linear(self.config.action_time_proj_width * 2, self.config.action_time_proj_width)
@@ -338,7 +338,7 @@ class ConditionMultipleHead(nn.Module):
         super().__init__()
 
         self.model = torch.nn.ModuleList(
-            [ConditionMAPLayer(query_dim, num_heads, dropout_rate) for _ in range(layer_num)]
+            [ConditionMAPLayer(query_dim, num_heads, dropout_rate, feedforward_dim=32768) for _ in range(layer_num)]
         )
 
         self.query_dim = query_dim
