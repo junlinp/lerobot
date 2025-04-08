@@ -3,6 +3,9 @@ from lerobot.common.optim.optimizers import AdamConfig
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.configs.types import NormalizationMode
 from lerobot.common.optim.optimizers import AdamWConfig
+from lerobot.common.optim.schedulers import (
+    CosineDecayWithWarmupSchedulerConfig,
+)
 
 
 @PreTrainedConfig.register_subclass("dm")
@@ -27,9 +30,16 @@ class DMConfig(PreTrainedConfig):
 
 
     optimizer_lr: float = 2.5e-5
-    optimizer_weight_decay: float = 1e-4
-    optimizer_lr_backbone: float = 1e-5
+    optimizer_betas: tuple[float, float] = (0.9, 0.95)
+    optimizer_eps: float = 1e-8
+    optimizer_weight_decay: float = 1e-10
 
+
+    scheduler_warmup_steps: int = 1_000
+    scheduler_decay_steps: int = 30_000
+    scheduler_decay_lr: float = 2.5e-6
+
+    optimizer_lr_backbone: float = 1e-5
     freeze_vision_encoder:bool = True
 
     def __post_init__(self):
@@ -39,12 +49,19 @@ class DMConfig(PreTrainedConfig):
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(
             lr = self.optimizer_lr,
+            betas=self.optimizer_betas,
+            eps=self.optimizer_eps,
             weight_decay=self.optimizer_weight_decay,
         )
 
 
-    def get_scheduler_preset(self) -> None:
-        return None
+    def get_scheduler_preset(self):
+        return CosineDecayWithWarmupSchedulerConfig(
+            peak_lr=self.optimizer_lr,
+            decay_lr=self.scheduler_decay_lr,
+            num_warmup_steps=self.scheduler_warmup_steps,
+            num_decay_steps=self.scheduler_decay_steps,
+        )
 
     def validate_features(self) -> None:
         if not self.image_features and not self.env_state_feature:

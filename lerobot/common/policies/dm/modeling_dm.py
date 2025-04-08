@@ -223,7 +223,7 @@ class DM(nn.Module):
     def __init__(self, config:DMConfig):
         super().__init__()
         self.config = config
-        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8, layer_num=32)
+        self.condition_action_policy = ConditionMultipleHead(self.config.action_time_proj_width, 768, 8, layer_num=128)
         self.project = torch.nn.Linear(768 * 196, 14)
         self.action_proj_action_time_embed = torch.nn.Linear(self.config.max_action_dim, self.config.action_time_proj_width)
         self.action_time_mlp_in = torch.nn.Linear(self.config.action_time_proj_width * 2, self.config.action_time_proj_width)
@@ -277,7 +277,7 @@ class DM(nn.Module):
             expanded_time = time.expand(batch_size)
             #expanded_time = einops.repeat(expanded_time, "batch_size -> batch_size action_seq action_dim", batch_size = batch_size, action_seq = self.config.n_action_steps, action_dim = self.config.max_action_dim)
             v_t = self.denoise_step(
-                 image_and_state_embed,
+                image_and_state_embed,
                 x_t,
                 expanded_time
             )
