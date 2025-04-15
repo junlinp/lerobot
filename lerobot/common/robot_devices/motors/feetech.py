@@ -590,7 +590,8 @@ class FeetechMotorsBus:
         """Inverse of `apply_calibration`."""
         if motor_names is None:
             motor_names = self.motor_names
-
+        #print(f"motor_names : {motor_names}")
+        #print(f"values : {values}")
         for i, name in enumerate(motor_names):
             calib_idx = self.calibration["motor_names"].index(name)
             calib_mode = self.calibration["calib_mode"][calib_idx]

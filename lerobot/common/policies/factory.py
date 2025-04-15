@@ -119,6 +119,7 @@ def make_policy(
 
     kwargs = {}
     if ds_meta is not None:
+        print("dataset_to_policy_features")
         features = dataset_to_policy_features(ds_meta.features)
         kwargs["dataset_stats"] = ds_meta.stats
     else:

@@ -409,8 +409,9 @@ def dataset_to_policy_features(features: dict[str, dict]) -> dict[str, PolicyFea
 
             names = ft["names"]
             # Backward compatibility for "channel" which is an error introduced in LeRobotDataset v2.0 for ported datasets.
-            if names[2] in ["channel", "channels"]:  # (h, w, c) -> (c, h, w)
+            if names[2] in ["channel", "channels"] and shape[2] <= 3:  # (h, w, c) -> (c, h, w)
                 shape = (shape[2], shape[0], shape[1])
+            print(f"key {key} from {ft['shape']} convert to {shape}")
         elif key == "observation.environment_state":
             type = FeatureType.ENV
         elif key.startswith("observation"):

@@ -265,7 +265,10 @@ def record(
             image_writer_processes=cfg.num_image_writer_processes,
             image_writer_threads=cfg.num_image_writer_threads_per_camera * len(robot.cameras),
         )
+    print(f"dataset.meta : {dataset.meta.features}")
+    print(f"dataset.features : {dataset.features}")
     if cfg.policy is not None:
+        print(f"policy input_features : {cfg.policy.input_features}")
         # asign the feature size from policy
         for key, policy_feature in cfg.policy.input_features.items():
             dataset.meta.features[key]['shape'] = policy_feature.shape
@@ -299,7 +302,7 @@ def record(
     while True:
         if recorded_episodes >= cfg.num_episodes:
             break
-
+        
         log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
         record_episode(
             robot=robot,
@@ -321,7 +324,8 @@ def record(
         ):
             log_say("Reset the environment", cfg.play_sounds)
             reset_environment(robot, events, cfg.reset_time_s, cfg.fps)
-
+            policy.reset()
+            
         if events["rerecord_episode"]:
             log_say("Re-record episode", cfg.play_sounds)
             events["rerecord_episode"] = False

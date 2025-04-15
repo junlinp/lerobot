@@ -463,7 +463,11 @@ class ManipulatorRobot:
         for name in self.follower_arms:
             before_fwrite_t = time.perf_counter()
             goal_pos = leader_pos[name]
-
+            #print(f"goal_pos : {goal_pos}")
+            extend_motor = torch.tensor([-0.3515625, -0.17578125])
+            #goal_pos.append(-0.3515625) 
+            #goal_pos.append(-0.17578125)
+            goal_pos = torch.concatenate([goal_pos, extend_motor])
             # Cap goal position when too far away from present position.
             # Slower fps expected due to reading from the follower.
             if self.config.max_relative_target is not None:
@@ -475,6 +479,7 @@ class ManipulatorRobot:
             follower_goal_pos[name] = goal_pos
 
             goal_pos = goal_pos.numpy().astype(np.int32)
+            #print(f"follower_arms[{name}]")
             self.follower_arms[name].write("Goal_Position", goal_pos)
             self.logs[f"write_follower_{name}_goal_pos_dt_s"] = time.perf_counter() - before_fwrite_t
 

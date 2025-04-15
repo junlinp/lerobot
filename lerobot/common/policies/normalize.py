@@ -144,6 +144,7 @@ class Normalize(nn.Module):
         self.features = features
         self.norm_map = norm_map
         self.stats = stats
+        print(f"features : {features}, norm_map : {norm_map}, stats : {stats}")
         stats_buffers = create_stats_buffers(features, norm_map, stats)
         for key, buffer in stats_buffers.items():
             setattr(self, "buffer_" + key.replace(".", "_"), buffer)
