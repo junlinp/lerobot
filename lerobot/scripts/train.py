@@ -51,7 +51,7 @@ from lerobot.common.utils.wandb_utils import WandBLogger
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.scripts.eval import eval_policy
-
+from accelerate import Accelerator
 
 def update_policy(
     train_metrics: MetricsTracker,
@@ -59,7 +59,7 @@ def update_policy(
     batch: Any,
     optimizer: Optimizer,
     grad_clip_norm: float,
-    grad_scaler: GradScaler,
+    accelerator: Accelerator,
     lr_scheduler=None,
     use_amp: bool = False,
     lock=None,
@@ -70,23 +70,24 @@ def update_policy(
     with torch.autocast(device_type=device.type) if use_amp else nullcontext():
         loss, output_dict = policy.forward(batch)
         # TODO(rcadene): policy.unnormalize_outputs(out_dict)
-    grad_scaler.scale(loss).backward()
+    accelerator.backward(loss)
 
     # Unscale the gradient of the optimizer's assigned params in-place **prior to gradient clipping**.
-    grad_scaler.unscale_(optimizer)
+    #grad_scaler.unscale_(optimizer)
 
-    grad_norm = torch.nn.utils.clip_grad_norm_(
-        policy.parameters(),
-        grad_clip_norm,
-        error_if_nonfinite=False,
-    )
+    #grad_norm = torch.nn.utils.clip_grad_norm_(
+    #    policy.parameters(),
+    #    grad_clip_norm,
+    #    error_if_nonfinite=False,
+    #)
 
     # Optimizer's gradients are already unscaled, so scaler.step does not unscale them,
     # although it still skips optimizer.step() if the gradients contain infs or NaNs.
-    with lock if lock is not None else nullcontext():
-        grad_scaler.step(optimizer)
+    #with lock if lock is not None else nullcontext():
+    #    grad_scaler.step(optimizer)
     # Updates the scale for next iteration.
-    grad_scaler.update()
+    #grad_scaler.update()
+    optimizer.step()
 
     optimizer.zero_grad()
 
@@ -99,7 +100,7 @@ def update_policy(
         policy.update()
 
     train_metrics.loss = loss.item()
-    train_metrics.grad_norm = grad_norm.item()
+    #train_metrics.grad_norm = grad_norm.item()
     train_metrics.lr = optimizer.param_groups[0]["lr"]
     train_metrics.update_s = time.perf_counter() - start_time
     return train_metrics, output_dict
@@ -143,7 +144,8 @@ def train(cfg: TrainPipelineConfig):
 
     logging.info("Creating optimizer and scheduler")
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
-    grad_scaler = GradScaler(device.type, enabled=cfg.policy.use_amp)
+
+    #grad_scaler = GradScaler(device.type, enabled=cfg.policy.use_amp)
 
     step = 0  # number of policy updates (forward + backward + optim)
 
@@ -185,7 +187,10 @@ def train(cfg: TrainPipelineConfig):
         pin_memory=device.type != "cpu",
         drop_last=False,
     )
+    accelerator = Accelerator()
+    policy, optimizer, dataloader, lr_scheduler = accelerator.prepare(policy, optimizer, dataloader, lr_scheduler)
     dl_iter = cycle(dataloader)
+
 
     policy.train()
 
@@ -217,7 +222,7 @@ def train(cfg: TrainPipelineConfig):
             batch,
             optimizer,
             cfg.optimizer.grad_clip_norm,
-            grad_scaler=grad_scaler,
+            accelerator=accelerator,
             lr_scheduler=lr_scheduler,
             use_amp=cfg.policy.use_amp,
         )
