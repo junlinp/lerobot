@@ -87,7 +87,7 @@ class WandBLogger:
                 job_type="train_eval",
                 resume="must" if cfg.resume else None,
             )
-            print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
+            accelerator.print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
             logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
             self._wandb = wandb
 
@@ -117,6 +117,7 @@ class WandBLogger:
                     )
                     continue
                 self._wandb.log({f"{mode}/{k}": v}, step=step)
+            self._wandb.log({f"{mode}/gpu_used": self.accelerator.num_processes})
 
     def log_video(self, video_path: str, step: int, mode: str = "train"):
         if self.accelerator.is_main_process:

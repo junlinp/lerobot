@@ -65,9 +65,11 @@ def update_policy(
     lock=None,
 ) -> tuple[MetricsTracker, dict]:
     start_time = time.perf_counter()
-    device = get_device_from_parameters(policy)
+    #device = get_device_from_parameters(policy)
+    device = accelerator.device
     policy.train()
-    with torch.autocast(device_type=device.type) if use_amp else nullcontext():
+    #with torch.autocast(device_type=device.type) if use_amp else nullcontext():
+    with accelerator.autocast():
         loss, output_dict = policy.forward(batch)
         # TODO(rcadene): policy.unnormalize_outputs(out_dict)
     accelerator.backward(loss)
@@ -80,6 +82,7 @@ def update_policy(
     #    grad_clip_norm,
     #    error_if_nonfinite=False,
     #)
+    grad_norm = accelerator.clip_grad_norm_(policy.parameters(), grad_clip_norm)
 
     # Optimizer's gradients are already unscaled, so scaler.step does not unscale them,
     # although it still skips optimizer.step() if the gradients contain infs or NaNs.
@@ -99,8 +102,12 @@ def update_policy(
         # To possibly update an internal buffer (for instance an Exponential Moving Average like in TDMPC).
         policy.update()
 
-    train_metrics.loss = loss.item()
-    #train_metrics.grad_norm = grad_norm.item()
+    loss, grad_norm, output_dict = accelerator.gather([loss, grad_norm, output_dict])
+    for key,value in output_dict.items():
+        output_dict[key] = value.mean().item()
+
+    train_metrics.loss = loss.mean().item()
+    train_metrics.grad_norm = grad_norm.mean().item()
     train_metrics.lr = optimizer.param_groups[0]["lr"]
     train_metrics.update_s = time.perf_counter() - start_time
     return train_metrics, output_dict
@@ -207,7 +214,7 @@ def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
     }
 
     train_tracker = MetricsTracker(
-        cfg.batch_size, dataset.num_frames, dataset.num_episodes, train_metrics, initial_step=step
+        cfg.batch_size * accelerator.num_processes, dataset.num_frames, dataset.num_episodes, train_metrics, initial_step=step
     )
 
     logging.info("Start offline training on a fixed dataset")
@@ -298,6 +305,7 @@ def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
 
 def main():
     accelerator = Accelerator()
+    accelerator.wait_for_everyone()
     init_logging(accelerator= accelerator)
     train(accelerator = accelerator)
 
