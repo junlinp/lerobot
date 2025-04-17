@@ -118,7 +118,8 @@ def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
 
     device = accelerator.device
 
-    cfg.validate()
+    with accelerator.main_process_first():
+        cfg.validate()
     logging.info(pformat(cfg.to_dict()))
 
     if cfg.wandb.enable and cfg.wandb.project:
