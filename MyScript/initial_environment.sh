@@ -14,4 +14,4 @@ timeout = 60
 EOF
 
 pip install -e .
-
+apt-get update && apt-get install -y vim
