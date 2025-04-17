@@ -3,11 +3,11 @@ python lerobot/scripts/control_robot.py \
     --control.type=record \
     --control.display_cameras=false \
     --control.fps=30 \
-    --control.single_task="pick the pen into basket" \
-    --control.repo_id=junlinp/so100_50_episodes \
+    --control.single_task="pick all objects from right box into left box" \
+    --control.repo_id=junlinp/slower_operations_30_episodes_modified_PID_400 \
     --control.tags='["so100", "tutorial"]' \
     --control.warmup_time_s=10 \
-    --control.episode_time_s=25 \
-    --control.reset_time_s=10 \
-    --control.num_episodes=50 \
+    --control.episode_time_s=90 \
+    --control.reset_time_s=15 \
+    --control.num_episodes=30 \
     --control.push_to_hub=false
