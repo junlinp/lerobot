@@ -19,6 +19,7 @@ from pathlib import Path
 from termcolor import colored
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
+from accelerate import Accelerator
 
 from lerobot.common.constants import (
     CHECKPOINTS_DIR,
@@ -73,6 +74,7 @@ def save_checkpoint(
     cfg: TrainPipelineConfig,
     policy: PreTrainedPolicy,
     optimizer: Optimizer,
+    accelerator: Accelerator,
     scheduler: LRScheduler | None = None,
 ) -> None:
     """This function creates the following directory structure:
@@ -97,6 +99,7 @@ def save_checkpoint(
         scheduler (LRScheduler | None, optional): The scheduler to save the state from. Defaults to None.
     """
     pretrained_dir = checkpoint_dir / PRETRAINED_MODEL_DIR
+    policy = accelerator.unwrap_model(policy)
     policy.save_pretrained(pretrained_dir)
     cfg.save_pretrained(pretrained_dir)
     save_training_state(checkpoint_dir, step, optimizer, scheduler)

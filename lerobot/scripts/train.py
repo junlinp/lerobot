@@ -107,12 +107,15 @@ def update_policy(
 
 
 @parser.wrap()
-def train(cfg: TrainPipelineConfig):
+def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
+
+    device = accelerator.device
+
     cfg.validate()
     logging.info(pformat(cfg.to_dict()))
 
     if cfg.wandb.enable and cfg.wandb.project:
-        wandb_logger = WandBLogger(cfg)
+        wandb_logger = WandBLogger(cfg, accelerator)
     else:
         wandb_logger = None
         logging.info(colored("Logs will be saved locally.", "yellow", attrs=["bold"]))
@@ -121,12 +124,14 @@ def train(cfg: TrainPipelineConfig):
         set_seed(cfg.seed)
 
     # Check device is available
-    device = get_safe_torch_device(cfg.policy.device, log=True)
+    #device = get_safe_torch_device(cfg.policy.device, log=True)
+
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
 
     logging.info("Creating dataset")
-    dataset = make_dataset(cfg)
+    with accelerator.main_process_first():
+        dataset = make_dataset(cfg)
 
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
@@ -184,10 +189,9 @@ def train(cfg: TrainPipelineConfig):
         batch_size=cfg.batch_size,
         shuffle=shuffle,
         sampler=sampler,
-        pin_memory=device.type != "cpu",
+        #pin_memory=device.type != "cpu",
         drop_last=False,
     )
-    accelerator = Accelerator()
     policy, optimizer, dataloader, lr_scheduler = accelerator.prepare(policy, optimizer, dataloader, lr_scheduler)
     dl_iter = cycle(dataloader)
 
@@ -247,8 +251,10 @@ def train(cfg: TrainPipelineConfig):
         if cfg.save_checkpoint and is_saving_step:
             logging.info(f"Checkpoint policy after step {step}")
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
-            save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, lr_scheduler)
-            update_last_checkpoint(checkpoint_dir)
+            if accelerator.is_main_process:
+                save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, accelerator, lr_scheduler)
+                update_last_checkpoint(checkpoint_dir)
+
             if wandb_logger:
                 wandb_logger.log_policy(checkpoint_dir)
 
@@ -287,9 +293,13 @@ def train(cfg: TrainPipelineConfig):
 
     if eval_env:
         eval_env.close()
+    accelerator.end_training()
     logging.info("End of training")
 
+def main():
+    accelerator = Accelerator()
+    init_logging(accelerator= accelerator)
+    train(accelerator = accelerator)
 
 if __name__ == "__main__":
-    init_logging()
-    train()
+    main()

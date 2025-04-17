@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from accelerate import Accelerator
 
 
 def none_or_int(value):
@@ -107,7 +108,7 @@ def is_amp_available(device: str):
         raise ValueError(f"Unknown device '{device}.")
 
 
-def init_logging():
+def init_logging(accelerator: Accelerator):
     def custom_format(record):
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fnameline = f"{record.pathname}:{record.lineno}"
@@ -123,7 +124,11 @@ def init_logging():
     formatter.format = custom_format
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(console_handler)
+    if accelerator.is_main_process:
+        logging.getLogger().addHandler(console_handler)
+        logging.getLogger().setLevel(logging.INFO)
+    else:
+        logging.getLogger().setLevel(logging.WARNING)
 
 
 def format_big_number(num, precision=0):

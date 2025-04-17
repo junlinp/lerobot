@@ -24,6 +24,7 @@ from termcolor import colored
 
 from lerobot.common.constants import PRETRAINED_MODEL_DIR
 from lerobot.configs.train import TrainPipelineConfig
+from accelerate import Accelerator
 
 
 def cfg_to_group(cfg: TrainPipelineConfig, return_list: bool = False) -> list[str] | str:
@@ -58,64 +59,69 @@ def get_safe_wandb_artifact_name(name: str):
 class WandBLogger:
     """A helper class to log object using wandb."""
 
-    def __init__(self, cfg: TrainPipelineConfig):
+    def __init__(self, cfg: TrainPipelineConfig, accelerator:Accelerator):
         self.cfg = cfg.wandb
         self.log_dir = cfg.output_dir
         self.job_name = cfg.job_name
         self.env_fps = cfg.env.fps if cfg.env else None
         self._group = cfg_to_group(cfg)
+        self.accelerator = accelerator
+        if accelerator.is_main_process:
+            # Set up WandB.
+            os.environ["WANDB_SILENT"] = "True"
+            import wandb
 
-        # Set up WandB.
-        os.environ["WANDB_SILENT"] = "True"
-        import wandb
-
-        wandb_run_id = get_wandb_run_id_from_filesystem(self.log_dir) if cfg.resume else None
-        wandb.init(
-            id=wandb_run_id,
-            project=self.cfg.project,
-            entity=self.cfg.entity,
-            name=self.job_name,
-            notes=self.cfg.notes,
-            tags=cfg_to_group(cfg, return_list=True),
-            dir=self.log_dir,
-            config=cfg.to_dict(),
-            # TODO(rcadene): try set to True
-            save_code=False,
-            # TODO(rcadene): split train and eval, and run async eval with job_type="eval"
-            job_type="train_eval",
-            resume="must" if cfg.resume else None,
-        )
-        print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
-        logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
-        self._wandb = wandb
+            wandb_run_id = get_wandb_run_id_from_filesystem(self.log_dir) if cfg.resume else None
+            wandb.init(
+                id=wandb_run_id,
+                project=self.cfg.project,
+                entity=self.cfg.entity,
+                name=self.job_name,
+                notes=self.cfg.notes,
+                tags=cfg_to_group(cfg, return_list=True),
+                dir=self.log_dir,
+                config=cfg.to_dict(),
+                # TODO(rcadene): try set to True
+                save_code=False,
+                # TODO(rcadene): split train and eval, and run async eval with job_type="eval"
+                job_type="train_eval",
+                resume="must" if cfg.resume else None,
+            )
+            print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
+            logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
+            self._wandb = wandb
 
     def log_policy(self, checkpoint_dir: Path):
-        """Checkpoints the policy to wandb."""
-        if self.cfg.disable_artifact:
-            return
 
-        step_id = checkpoint_dir.name
-        artifact_name = f"{self._group}-{step_id}"
-        artifact_name = get_safe_wandb_artifact_name(artifact_name)
-        artifact = self._wandb.Artifact(artifact_name, type="model")
-        artifact.add_file(checkpoint_dir / PRETRAINED_MODEL_DIR / SAFETENSORS_SINGLE_FILE)
-        self._wandb.log_artifact(artifact)
+        """Checkpoints the policy to wandb."""
+        if self.accelerator.is_main_process:
+            if self.cfg.disable_artifact:
+                return
+
+            step_id = checkpoint_dir.name
+            artifact_name = f"{self._group}-{step_id}"
+            artifact_name = get_safe_wandb_artifact_name(artifact_name)
+            artifact = self._wandb.Artifact(artifact_name, type="model")
+            artifact.add_file(checkpoint_dir / PRETRAINED_MODEL_DIR / SAFETENSORS_SINGLE_FILE)
+            self._wandb.log_artifact(artifact)
 
     def log_dict(self, d: dict, step: int, mode: str = "train"):
-        if mode not in {"train", "eval"}:
-            raise ValueError(mode)
+        if self.accelerator.is_main_process:
+            if mode not in {"train", "eval"}:
+                raise ValueError(mode)
 
-        for k, v in d.items():
-            if not isinstance(v, (int, float, str)):
-                logging.warning(
-                    f'WandB logging of key "{k}" was ignored as its type is not handled by this wrapper.'
-                )
-                continue
-            self._wandb.log({f"{mode}/{k}": v}, step=step)
+            for k, v in d.items():
+                if not isinstance(v, (int, float, str)):
+                    logging.warning(
+                        f'WandB logging of key "{k}" was ignored as its type is not handled by this wrapper.'
+                    )
+                    continue
+                self._wandb.log({f"{mode}/{k}": v}, step=step)
 
     def log_video(self, video_path: str, step: int, mode: str = "train"):
-        if mode not in {"train", "eval"}:
-            raise ValueError(mode)
+        if self.accelerator.is_main_process:
+            if mode not in {"train", "eval"}:
+                raise ValueError(mode)
 
-        wandb_video = self._wandb.Video(video_path, fps=self.env_fps, format="mp4")
-        self._wandb.log({f"{mode}/video": wandb_video}, step=step)
+            wandb_video = self._wandb.Video(video_path, fps=self.env_fps, format="mp4")
+            self._wandb.log({f"{mode}/video": wandb_video}, step=step)
