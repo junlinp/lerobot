@@ -324,7 +324,6 @@ def record(
         ):
             log_say("Reset the environment", cfg.play_sounds)
             reset_environment(robot, events, cfg.reset_time_s, cfg.fps)
-            policy.reset()
             
         if events["rerecord_episode"]:
             log_say("Re-record episode", cfg.play_sounds)
@@ -332,7 +331,8 @@ def record(
             events["exit_early"] = False
             dataset.clear_episode_buffer()
             continue
-
+        if policy is not None:
+            policy.reset()
         dataset.save_episode()
         recorded_episodes += 1
 
