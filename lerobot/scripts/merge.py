@@ -207,15 +207,13 @@ class LerobotDatasetDirectory():
             for episode_idx in range(chunk_start, chunk_end):
                 episode_mask = [idx == episode_idx for idx in chunk_dataset["episode_index"]]
                 episode_dataset = chunk_dataset.filter(lambda _, idx: episode_mask[idx], with_indices=True)
+                chunk_dataset = chunk_dataset.filter(lambda _, idx: not episode_mask[idx], with_indices=True)
                 if len(episode_dataset) > 0:
                     episode_path = os.path.join(self.root_dir, self.info['data_path'].format(episode_chunk=chunk,episode_index = episode_idx))
                     # Save chunk to parquet file
                     chunk_path = os.path.dirname(episode_path)
                     os.makedirs(chunk_path, exist_ok=True)
-
                     episode_dataset.to_parquet(episode_path)
-
-        #print(f"self.hf_dataset : {self.hf_dataset['episode_index'][23468]}")
 
     def load_hf_dataset(self):
         return datasets.load_dataset("parquet", data_dir=self.data_dir_path, split="train")
