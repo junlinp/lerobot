@@ -6,7 +6,7 @@ import pandas as pd
 api = wandb.Api()
 #runs = api.runs("yixuan-he-deepmirror/vast_h100_num_works_test")
 #runs = api.runs("yixuan-he-deepmirror/vast_5090_num_works_test")
-runs = api.runs("yixuan-he-deepmirror/multiple_gpu_4090_sim_insertion")
+runs = api.runs("yixuan-he-deepmirror/pick_cup_and_pen")
 
 
 data = []
