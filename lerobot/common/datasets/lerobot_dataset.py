@@ -72,6 +72,8 @@ from lerobot.common.datasets.video_utils import (
     get_video_info,
 )
 from lerobot.common.robot_devices.robots.utils import Robot
+from PIL import Image
+import tqdm
 
 CODEBASE_VERSION = "v2.1"
 
@@ -363,6 +365,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         force_cache_sync: bool = False,
         download_videos: bool = True,
         video_backend: str | None = None,
+        create_video_cache: bool = False,
     ):
         """
         2 modes are available for instantiating this class, depending on 2 different use cases:
@@ -513,6 +516,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if self.delta_timestamps is not None:
             check_delta_timestamps(self.delta_timestamps, self.fps, self.tolerance_s)
             self.delta_indices = get_delta_indices(self.delta_timestamps, self.fps)
+        if create_video_cache:
+            self.create_video_cache()
+        self.create_video_cache = create_video_cache    
 
     def push_to_hub(
         self,
@@ -737,7 +743,23 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if len(self.meta.video_keys) > 0:
             current_ts = item["timestamp"].item()
             query_timestamps = self._get_query_timestamps(current_ts, query_indices)
-            video_frames = self._query_videos(query_timestamps, ep_idx)
+            video_frames = {}
+            for vid_key, timestamps in query_timestamps.items():
+                if self.create_video_cache:
+                    # Create cache directory if it doesn't exist
+                    cache_dir = self.root / "frame_cache"
+                    cache_dir.mkdir(exist_ok=True)
+                    frames = []
+                    for ts in timestamps:
+                        # Generate cache path for this frame
+                        cache_path = cache_dir / f"ep{ep_idx}_{vid_key}_{ts:.6f}.png"
+                        # Load frame from cache
+                        frame = torch.from_numpy(np.array(Image.open(cache_path)))
+                        frames.append(frame)
+                    video_frames[vid_key] = torch.stack(frames)
+                else:
+                    # Read directly from video if not using cache
+                    self._query_videos(query_timestamps, ep_idx)
             item = {**video_frames, **item}
 
         if self.image_transforms is not None:
@@ -750,6 +772,18 @@ class LeRobotDataset(torch.utils.data.Dataset):
         item["task"] = self.meta.tasks[task_idx]
 
         return item
+    
+    def create_video_cache(self):
+        for idx in tqdm.tqdm(range(len(self.hf_dataset)), desc="Creating video cache"):
+            item = self.hf_dataset[idx]
+            ep_idx = item["episode_index"].item()
+            timestamp = item["timestamp"].item()
+            for vid_key in self.meta.video_keys:
+                video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
+                cache_path = self.root / "frame_cache" / f"ep{ep_idx}_{vid_key}_{timestamp:.6f}.png"
+                if not cache_path.exists():
+                    frame = decode_video_frames_torchvision(video_path, [timestamp], self.tolerance_s, self.video_backend).squeeze(0)
+                    self._save_image(frame, cache_path) 
 
     def __repr__(self):
         feature_keys = list(self.features)

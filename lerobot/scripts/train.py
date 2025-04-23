@@ -145,9 +145,11 @@ def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
     eval_env = None
-    if cfg.eval_freq > 0 and cfg.env is not None:
-        logging.info("Creating env")
-        eval_env = make_env(cfg.env, n_envs=cfg.eval.batch_size)
+
+    if accelerator.is_main_process:
+        if cfg.eval_freq > 0 and cfg.env is not None:
+            logging.info("Creating env")
+            eval_env = make_env(cfg.env, n_envs=cfg.eval.batch_size)
 
     logging.info("Creating policy")
     policy = make_policy(
@@ -266,7 +268,7 @@ def train(cfg: TrainPipelineConfig, accelerator:Accelerator):
             if wandb_logger:
                 wandb_logger.log_policy(checkpoint_dir)
 
-        if cfg.env and is_eval_step:
+        if cfg.env and is_eval_step and accelerator.is_main_process:
             step_id = get_step_identifier(step, cfg.steps)
             logging.info(f"Eval policy at step {step}")
             with (

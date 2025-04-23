@@ -1,17 +1,24 @@
 import time
 import torch
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+import argparse
 
 def main():
-    batch_size = 64
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo_id", type=str, default="lerobot/aloha_sim_transfer_cube_human")
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--pin_memory", type=bool, default=True)
+    parser.add_argument("--create_video_cache", type=bool, default=True)
+    args = parser.parse_args()
     # Create dataset and dataloader
-    dataset = LeRobotDataset("lerobot/aloha_sim_transfer_cube_human")
+    dataset = LeRobotDataset(args.repo_id, create_video_cache=args.create_video_cache)
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         shuffle=True,
-        num_workers=8,
-        pin_memory=True,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
         drop_last=True
     )
 
