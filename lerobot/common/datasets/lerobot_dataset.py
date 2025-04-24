@@ -744,8 +744,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
             current_ts = item["timestamp"].item()
             query_timestamps = self._get_query_timestamps(current_ts, query_indices)
             video_frames = {}
-            for vid_key, timestamps in query_timestamps.items():
-                if self.create_video_cache:
+            if self.create_video_cache:
+                #print(f"query_timestamps : {query_timestamps}")
+                for vid_key, timestamps in query_timestamps.items():
                     # Create cache directory if it doesn't exist
                     cache_dir = self.root / "frame_cache"
                     cache_dir.mkdir(exist_ok=True)
@@ -755,13 +756,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
                         cache_path = cache_dir / f"ep{ep_idx}_{vid_key}_{ts:.6f}.png"
                         # Load frame from cache
                         frame = torch.from_numpy(np.array(Image.open(cache_path)))
-                        frames.append(frame)
-                    video_frames[vid_key] = torch.stack(frames)
-                else:
-                    # Read directly from video if not using cache
-                    self._query_videos(query_timestamps, ep_idx)
+                        frame = frame.type(torch.float32) / 255
+                        # channel first
+                        frame = frame.permute(2, 0, 1)
+                        video_frames[vid_key] = frame
+            else:
+                # Read directly from video if not using cache
+                video_frames = self._query_videos(query_timestamps, ep_idx)
+            #print(f"video_frames keys : {video_frames.keys()}")
+            for key, value in video_frames.items():
+                #print(f"{key} : {value.shape}")
+                pass
+            
             item = {**video_frames, **item}
-
         if self.image_transforms is not None:
             image_keys = self.meta.camera_keys
             for cam in image_keys:
@@ -774,6 +781,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
         return item
     
     def create_video_cache(self):
+        cache_dir = self.root / "frame_cache"
+        if not cache_dir.exists():
+            cache_dir.mkdir(parents=True, exist_ok=True)
         for idx in tqdm.tqdm(range(len(self.hf_dataset)), desc="Creating video cache"):
             item = self.hf_dataset[idx]
             ep_idx = item["episode_index"].item()
