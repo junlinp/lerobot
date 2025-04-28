@@ -517,6 +517,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             check_delta_timestamps(self.delta_timestamps, self.fps, self.tolerance_s)
             self.delta_indices = get_delta_indices(self.delta_timestamps, self.fps)
         if create_video_cache:
+            print(f"Creating video cache : {create_video_cache}")
             self.create_video_cache()
         self.create_video_cache = create_video_cache    
 
@@ -748,13 +749,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 #print(f"query_timestamps : {query_timestamps}")
                 for vid_key, timestamps in query_timestamps.items():
                     # Create cache directory if it doesn't exist
-                    cache_dir = self.root / "frame_cache"
+                    cache_dir = self.root / "frame_cache" / f"ep{ep_idx}"
                     cache_dir.mkdir(exist_ok=True)
                     frames = []
                     for ts in timestamps:
                         # Generate cache path for this frame
-                        cache_path = cache_dir / f"ep{ep_idx}_{vid_key}_{ts:.6f}.png"
+                        cache_path = cache_dir / f"{vid_key}_{ts:.6f}.png"
                         # Load frame from cache
+                        #print(f"cache_path : {cache_path}")
                         frame = torch.from_numpy(np.array(Image.open(cache_path)))
                         frame = frame.type(torch.float32) / 255
                         # channel first
@@ -784,16 +786,66 @@ class LeRobotDataset(torch.utils.data.Dataset):
         cache_dir = self.root / "frame_cache"
         if not cache_dir.exists():
             cache_dir.mkdir(parents=True, exist_ok=True)
-        for idx in tqdm.tqdm(range(len(self.hf_dataset)), desc="Creating video cache"):
-            item = self.hf_dataset[idx]
-            ep_idx = item["episode_index"].item()
-            timestamp = item["timestamp"].item()
+
+        # Group dataset by episode index
+        episode_indices = torch.stack(self.hf_dataset["episode_index"]).numpy()
+        unique_episodes = np.unique(episode_indices)
+
+        # Create a thread pool for parallel processing
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+
+        def process_episode(ep_idx):
+            # Get all timestamps for this episode
+            episode_mask = episode_indices == ep_idx
+            episode_timestamps = torch.stack(self.hf_dataset["timestamp"])[episode_mask].numpy()
+            
             for vid_key in self.meta.video_keys:
                 video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
-                cache_path = self.root / "frame_cache" / f"ep{ep_idx}_{vid_key}_{timestamp:.6f}.png"
-                if not cache_path.exists():
-                    frame = decode_video_frames_torchvision(video_path, [timestamp], self.tolerance_s, self.video_backend).squeeze(0)
-                    self._save_image(frame, cache_path) 
+                # Process frames in batches to avoid memory issues
+                batch_size = 16  # Adjust batch size based on available memory
+                
+                for batch_start in range(0, len(episode_timestamps), batch_size):
+                    batch_end = min(batch_start + batch_size, len(episode_timestamps))
+                    batch_timestamps = episode_timestamps[batch_start:batch_end]
+                    
+                    # Create episode-specific cache directory
+                    ep_cache_dir = self.root / "frame_cache" / f"ep{ep_idx}"
+                    ep_cache_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Filter timestamps that don't have cached frames yet
+                    batch_timestamps = [ts for ts in batch_timestamps 
+                                     if not (ep_cache_dir / f"{vid_key}_{ts:.6f}.png").exists()]
+                    
+                    if len(batch_timestamps) > 0:
+                        # Decode frames for this batch
+                        frames = decode_video_frames_torchvision(
+                            video_path,
+                            batch_timestamps,
+                            self.tolerance_s,
+                            self.video_backend
+                        )
+                        # Save frames in this batch
+                        for frame_idx, timestamp in enumerate(batch_timestamps):
+                            cache_path = ep_cache_dir / f"{vid_key}_{timestamp:.6f}.png"
+                            if not cache_path.exists():
+                                self._save_image(frames[frame_idx], cache_path)
+
+        # Create a progress bar that updates safely across threads
+        pbar = tqdm.tqdm(total=len(unique_episodes), desc="Creating video cache for episodes")
+        progress_lock = threading.Lock()
+        
+        def update_progress(_):
+            with progress_lock:
+                pbar.update(1)
+
+        # Process episodes in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(process_episode, ep_idx) for ep_idx in unique_episodes]
+            for future in futures:
+                future.add_done_callback(update_progress)
+                
+        pbar.close()
 
     def __repr__(self):
         feature_keys = list(self.features)

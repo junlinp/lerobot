@@ -8,10 +8,12 @@ def main():
     parser.add_argument("--repo_id", type=str, default="lerobot/aloha_sim_transfer_cube_human")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_workers", type=int, default=8)
-    parser.add_argument("--pin_memory", type=bool, default=True)
+    parser.add_argument("--pin_memory", type=bool, default=False)
     parser.add_argument("--create_video_cache", type=bool, default=False)
     args = parser.parse_args()
     # Create dataset and dataloader
+    print(f"Creating video cache : {args.create_video_cache}")
+    print(f"Repo ID : {args.repo_id}")
     dataset = LeRobotDataset(args.repo_id, create_video_cache=args.create_video_cache)
     dataloader = torch.utils.data.DataLoader(
         dataset,
